@@ -46,7 +46,7 @@ fn init(app: &mut App, gfx: &mut Graphics) -> State {
     // app.window().set_position(-807, 188);
 
     // Load the config file
-    let config_file = get_appdata() + &"\\yara\\config.json";
+    let config_file = get_appdata() + &"/yara/config.json";
     let file = match std::fs::File::open(&config_file) {
         Ok(x) => x,
         Err(e) => { panic!("Error while loading config file within notan init function\n{e}"); }

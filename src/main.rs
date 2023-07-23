@@ -50,7 +50,7 @@ struct RemovePrompts {
 
 fn main() {
     // Load the config file
-    let config_file = get_appdata() + &"\\yara\\config.json";
+    let config_file = get_appdata() + &"/yara/config.json";
     let file = match std::fs::File::open(&config_file) {
         Ok(x) => x,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => { 
@@ -365,7 +365,7 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
         }
     }
     p_prompt = p_prompt.replace("\"", "");
-    p_prompt = p_prompt.replace("\\n", " ");
+    p_prompt = p_prompt.replace("/n", " ");
     // println!("positive prompt: {p_prompt:#?}");
 
     PromptInfo {
@@ -679,7 +679,7 @@ fn get_path(arg: String) -> PathBuf {
 fn open_config_dir() {
     println!("Opening folder with config file.");
     Command::new("explorer")
-        .arg(get_appdata() + &"\\yara")
+        .arg(get_appdata() + &"/yara")
         .spawn()
         .unwrap();
 }
@@ -713,13 +713,13 @@ fn melatonin() {
 
 #[cfg(any(target_os = "linux"))]
 fn open_config_dir() {
-    println!("'yara config' not currently implemented for linux");
+    println!("Your config file is located in \"{}/yara\".", get_appdata())
 }
 #[cfg(any(target_os = "linux"))]
 fn caffeine() {
-    println!("Sleep mode toggles not currently implemented for linux");
+    println!("Sleep mode toggles not currently implemented for linux (i'm lazy sorry)");
 }
 #[cfg(any(target_os = "linux"))]
 fn melatonin() {
-    println!("Sleep mode toggles not currently implemented for linux");
+    println!("Sleep mode toggles not currently implemented for linux (i'm lazy sorry)");
 }

@@ -56,7 +56,7 @@ pub fn get_appdata() -> String {
 
 pub fn create_new_config() {
     let mut config_root = get_appdata();
-    config_root += "\\yara";
+    config_root += "/yara";
 
     println!("Please select the \"output\" folder in your ComfyUI directory:");
     let comfyui_output_directory: PathBuf = FileDialog::new().show_open_single_dir().unwrap().unwrap();
@@ -76,9 +76,9 @@ pub fn create_new_config() {
         Ok(_) => println!("    Created 'yara' directory in {}", config_root),
         Err(e) => println!("    Didn't create 'yara' directory: {e}"),
     };
-    match fs::create_dir(config_root.clone() + "\\saved_queues") {
-        Ok(_) => println!("    Created 'saved_queues' directory in {}\\saved_queues", config_root),
+    match fs::create_dir(config_root.clone() + "/saved_queues") {
+        Ok(_) => println!("    Created 'saved_queues' directory in {}/saved_queues", config_root),
         Err(e) => println!("    Didn't create 'saved_queues' directory: {e}"),
     };
-    fs::write(config_root + &"\\config.json", serde_json::to_string_pretty(&cfg).unwrap()).unwrap();
+    fs::write(config_root + &"/config.json", serde_json::to_string_pretty(&cfg).unwrap()).unwrap();
 }
