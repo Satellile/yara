@@ -207,6 +207,6 @@ Some of the commands can be shortened, for convenience:
 
 If you have an issue, question, or request for some feature/config option, feel free to make an issue or message me.
 
-This is currently Windows-only. A linux build should be able to be compiled from source, though, I think (with a couple minor missing features). I mostly just don't feel like doing it since I don't think too many people are going to use this, but if anyone actually wants to use it and is on Linux, message me or make an issue post.
+This is developed mainly with Windows in mind. There's a Linux release, but it's missing some features (sleep mode toggles) and when I very briefly tested it, the image preview feature didn't work. I mostly use Windows and my time is limited (as is everybody's), so it's not something I'm prioritizing, but if anybody wants to use it on Linux, feel free to make a pull request, a GitHub issue, or just send me a message so I know people are interested in it.
 
 This is built for the latest ComfyUI release binary as of July 22, 2023. Future ComfyUI versions may change the API and thus break parts of this program.
