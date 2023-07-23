@@ -1,20 +1,18 @@
 
 
-    Yara
+Yara
 =======
 
 Yara is a companion tool for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), based in the terminal. 
+It can:
 
-
-Yara can:
-
-- **Pause queue generations via saving/loading them to files**
-- **Delete batches of queued generations by their number/ID**
+- **Pause queue generations by saving/loading them to files**
+- **Cancel queued generations by their number/ID**
+- **Toggle sleep mode, to prevent your computer from going to sleep and halting ComfyUI**
 - **Examine the prompts and models in the running/pending queue**
-- **Toggle sleep mode, to prevent your computer from going to sleep and stopping ComfyUI**
 - **Wait until all jobs/prompts are finished, estimating the remaining time**
-- **Create a small always-on-top window that displays the latest generated image**
-- **Check the embedded generation data in an image**
+- **Create an always-on-top window to display the latest generated image**
+- **Display an image's embedded generation data**
 - **Help download from CivitAI**
 
 
@@ -26,19 +24,27 @@ Yara can:
 
 # Installing
 
-### [Direct link to download](https://github.com/comfyanonymous/ComfyUI/releases/download/latest/ComfyUI_windows_portable_nvidia_cu118_or_cpu.7z)
+### [Direct link to download]()
 
 Download "yara.exe". 
-
-Open a terminal in the same directory/folder as "yara.exe", and run yara through the terminal by typing "yara".
+Open a terminal in the same directory/folder as "yara.exe", and run the program through the terminal by simply typing "yara".
 
 The first time you run, you must select your ComfyUI output folder, and then a config file will automatically be created.
 You can open the folder containing the config file with the argument "yara config", to edit it manually (most of the options are just for configuring "yara preview").
 
 
 # Usage
+1. [Saving, Loading, Deleting, and Listing Queues](#saving-queues)
+2. [Examining the Running Queue](#examining-the-running-queue)
+3. [Deleting Generations by Number](#deleting-generations-by-number)
+4. [Toggle Sleep Mode](#toggle-sleep-mode)
+5. [Check an Image's Embedded Generation Info](#imagegen)
+6. [Create a Window Displaying the Most Recently Generated Image](#create-a-window-displaying-the-most-recently-generated-image)
+7. [Open the Folder Containing the Config File](#open-the-folder-containing-the-config-file)
+8. [Download From CivitAI](#download-from-civitai)
+9. [Print Help](#print-help)
 
-## Saving, Loading, Deleting, and Listing Queues
+## Saving, Loading, Deleting, and Listing Queues <a name="saving-queues"></a>
 
 To save pending generations to a file, run
 
@@ -96,9 +102,8 @@ ComfyUI doesn't prevent Windows from sleeping, but sleep mode halts ComfyUI gene
 
     yara caffeine   // disable sleep mode
     yara melatonin  // enable sleep mode
-
-Melatonin will, by default, set Windows to sleep after 30 minutes. You can customize this length in the config file.
-
+    
+By default, 'melatonin' will have Windows sleep after 30 minutes of inactivity. You can customize this length in the config file.
 
 ## Halt Terminal Until Queue Is Empty
 
@@ -117,7 +122,7 @@ As a shorthand, you can use
 to disable sleep mode, wait until the queue is empty, and then re-enable sleep mode. (cwm standing for Caffeine/Wait/Melatonin).
 
 
-## Check an Image's Embedded Generation Info
+## Check an Image's Embedded Generation Info  <a name="imagegen"></a>
 
 Run 
 
@@ -147,7 +152,7 @@ To open the folder containing the config.json file, run
     yara config
 
 
-## Help download from CivitAI
+## Download From CivitAI
 
 Run 
 
@@ -160,7 +165,7 @@ I mostly use it for the latter feature, as I keep a text file with relevant info
     yara cai -nd [URLs]
 
 
-## Print Commands
+## Print Help
 
 To display available commands/arguments, use
 
@@ -178,12 +183,12 @@ Some of the commands can be shortened, for convenience:
 | load | l |
 | delete | d |
 | examine | e | 
- | wait | w | 
-  | caffeine | c | 
-   | melatonin | m | 
-    | preview | p | 
-   | image | i | 
-    | help | h | 
+| wait | w | 
+| caffeine | c | 
+| melatonin | m | 
+| preview | p | 
+| image | i | 
+| help | h | 
 
 
 
@@ -199,4 +204,4 @@ This is built for the latest ComfyUI release as of July 22, 2023. Future updates
 
 If you have an issue, question, or request for some feature/config option, feel free to make an issue or message me.
 
-This is currently Windows-only. A linux build should be able to be compiled from source, though, I think. I mostly just don't feel like doing it since I don't think too many people are going to use this, but if anyone actually wants to use it and is on Linux, message me or make an issue post.
+This is currently Windows-only. A linux build should be able to be compiled from source, though, I think (with a couple minor missing features). I mostly just don't feel like doing it since I don't think too many people are going to use this, but if anyone actually wants to use it and is on Linux, message me or make an issue post.
