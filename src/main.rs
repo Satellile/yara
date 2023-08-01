@@ -11,13 +11,21 @@ use serde::{Serialize, Deserialize};
 mod config;
 mod image_preview;
 mod civitai;
+mod regen;
+mod fix;
+mod data;
+
+use regen::unmute_and_regenerate;
+use fix::{generate_yara_prompts, fix_workflows_in_folders, fix_workflow_in_file};
+use data::YaraPrompt;
 
 use config::{
     get_appdata, 
-    create_new_config,
     Config,
+    create_new_config,
+    WorkflowStorage,
+    create_new_workflow_storage
 };
-
 
 #[derive(Debug)]
 struct PromptInfo {
@@ -26,7 +34,7 @@ struct PromptInfo {
     models: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Prompt {
     prompt: Value,
 }
@@ -46,11 +54,9 @@ struct RemovePrompts {
 }
 
 
-
-
 fn main() {
     // Load the config file
-    let config_file = get_appdata() + &"/yara/config.json";
+    let config_file = get_config_file();
     let file = match std::fs::File::open(&config_file) {
         Ok(x) => x,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => { 
@@ -63,10 +69,29 @@ fn main() {
         Err(e) => { panic!("{e}"); }
     };
     let reader = BufReader::new(file);
-    let cfg: Config = match serde_json::from_reader(reader) {
+    let mut cfg: Config = match serde_json::from_reader(reader) {
         Ok(x) => x,
         Err(e) => panic!("Error while reading config file:\n{e}\nTry deleting your config file and running the program again.\n\n"),
     };
+
+    // Load the workflow file
+    let workflow_storage_file = get_appdata() + &"/yara/workflow_storage.json";
+    let file = match std::fs::File::open(&workflow_storage_file) {
+        Ok(x) => x,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => { 
+            println!("Workflow storage file not found, creating new file...");
+            create_new_workflow_storage(); 
+            println!("Workflow storage file created!");
+            std::fs::File::open(&workflow_storage_file).unwrap()
+        }
+        Err(e) => { panic!("{e}"); }
+    };
+    let reader = BufReader::new(file);
+    let mut workflow_storage: WorkflowStorage = match serde_json::from_reader(reader) {
+        Ok(x) => x,
+        Err(e) => panic!("Error while reading workflow storage file:\n{e}\n\n"),
+    };
+
     // let comfyui_ip_port = "localhost:" + &cfg.comfyui_port.to_string();
 
     let mut args = std::env::args().skip(1);
@@ -118,7 +143,14 @@ fn main() {
             "i" | "image" => {
                 while image_generation_info() == ImageGenInteractive::Repeat {}
             }
-            "h" | "help" => { print_help(); }
+            "h" | "help" => {
+                if let Some(arg) = args.next() {
+                    if (arg.to_lowercase() == "regen") || (arg.to_lowercase() == "rg") {
+                        print_help_regen();
+                    } else { print_help(); }
+                } 
+                else { print_help(); }
+            }
             "cai" => {
                 civitai::download(&mut args);
 
@@ -152,6 +184,50 @@ fn main() {
             "config" => {
                 open_config_dir();
             }
+            "rg" | "regen" => {
+                let args: Vec<String> = args.collect();
+                let mut yara_prompts: Vec<YaraPrompt> = Vec::new();
+                if !args.is_empty() {
+                    for path in args {
+                        let path = PathBuf::from(path);
+                        if !path.is_dir() {
+                            let yara_prompt = unmute_and_regenerate(PathBuf::from(path), cfg.get_input_dir());
+                            yara_prompts.push(yara_prompt);
+                        } else { println!("Error - 'yara regen' doesn't currently support specifying folders to regenerate."); }
+                    } 
+                } else {
+                    for entry in fs::read_dir(cfg.get_regen_dir()).unwrap() {
+                        let path = entry.unwrap().path();
+                        if !path.is_dir() { continue; }
+                        if let Some(extension) = path.extension() {
+                            if extension == "png" {
+                                let yara_prompt = unmute_and_regenerate(path, cfg.get_input_dir());
+                                yara_prompts.push(yara_prompt);
+                            }
+                        }
+                    }
+                }
+                generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
+            }
+            "f" | "fix" => {
+                let args: Vec<String> = args.collect();
+                let mut dirs: Vec<PathBuf> = Vec::new();
+                if !args.is_empty() {
+                    for arg in args {
+                        let path = PathBuf::from(arg);
+                        if path.is_dir() {
+                            dirs.push(path);
+                        } else {
+                            fix_workflow_in_file(&mut workflow_storage, &workflow_storage_file, path);
+                        }
+                    } 
+                    if !dirs.is_empty() {
+                        fix_workflows_in_folders(&mut workflow_storage, &workflow_storage_file, dirs);
+                    }
+                } else {
+                    fix_workflows_in_folders(&mut workflow_storage, &workflow_storage_file, cfg.get_workflow_recovery_dirs());
+                }
+            }
             _ => {
                 println!("Unrecognized command.");
                 
@@ -178,11 +254,16 @@ fn save_queue(arg: String, cmd: SaveQueue) {
         }
     }
 
+
+    let mut ordered_prompts: Vec<(i64, Prompt)> = Vec::new();
     if let Some(x) = json_data["queue_pending"].as_array() {
         for p in x {
-            prompts.push(Prompt{prompt:p[2].clone()});
+            ordered_prompts.push((p[0].as_i64().unwrap(), Prompt{prompt:p[2].clone()}));
         }
     }
+    ordered_prompts.sort_by(|a, b| a.0.cmp(&b.0));
+    let (_, x): (Vec<i64>, Vec<Prompt>) = ordered_prompts.iter().cloned().unzip();
+    prompts.extend(x);
 
     let path = get_path(arg);
     let _ = serde_json::to_writer(&fs::File::create(path.clone()).unwrap(), &prompts);
@@ -259,24 +340,34 @@ fn delete_saved_queue(arg: String) {
 }
 
 
+
+
+
 fn examine_queue() {
     let queue_data = get_queue();
     let json_data: Value = serde_json::from_str(&queue_data).unwrap();
 
-    let mut count = 0;
+    let mut ordered_prompts: Vec<(i64, PromptInfo)> = Vec::new();
 
     if let Some(x) = json_data["queue_pending"].as_array() {
-        for p in x.iter().rev() {
+        for p in x {
             let pinfo = get_prompt_info(p);
-            print!("\x1b[32m{}: \x1b[0m", pinfo.id);
-            for model in pinfo.models {
-                print!("\x1b[32m{model}, \x1b[0m");
-            }
-            println!("\n\x1b[32mPositive:\x1b[0m {}", pinfo.positive);
-            println!("\n");
-            count += 1;
+            ordered_prompts.push((p[0].as_i64().unwrap(), pinfo));
         }
     }
+    ordered_prompts.sort_by(|a, b| b.0.cmp(&a.0));
+
+    for (_, pinfo) in &ordered_prompts {
+        print!("\x1b[32m{}: \x1b[0m", pinfo.id);
+        for model in &pinfo.models {
+            print!("\x1b[32m{model}, \x1b[0m");
+        }
+        println!("\n\x1b[32mPositive:\x1b[0m {}", pinfo.positive);
+        println!("\n");
+    }
+    let mut count = ordered_prompts.len();
+
+
 
     if let Some(x) = json_data["queue_running"].as_array() {
         for p in x {
@@ -345,14 +436,29 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
     // Get positive prompt
     let mut curr_node_id: u64 = sampler_id;
     let mut p_prompt = String::new();
+    // TO-DO: Refactor this section
     loop {
         let curr_node = nodemap.get(&curr_node_id).unwrap();
-        if curr_node["class_type"] == "CLIPTextEncode" {
+        if curr_node["class_type"] == "PromptText" {
             p_prompt = curr_node["inputs"]["text"].to_string();
             break;
         }
+        if curr_node["class_type"] == "CLIPTextEncode" {
+            if let Some(input_node_id) = curr_node["inputs"].get("text") {
+                curr_node_id = match remove_quotes(input_node_id[0].to_string()).parse::<u64>() {
+                    Ok(x) => x,
+                    Err(_) => {
+                        p_prompt = curr_node["inputs"]["text"].to_string();
+                        break;
+                    }
+                }
+            } else {
+                p_prompt = curr_node["inputs"]["text"].to_string();
+                break;
+            }
+        }
 
-        if let Some(input_node_id) = curr_node["inputs"].get("positive") {
+        else if let Some(input_node_id) = curr_node["inputs"].get("positive") {
             curr_node_id = remove_quotes(input_node_id[0].to_string())
                 .parse::<u64>().unwrap();
         } 
@@ -441,6 +547,20 @@ fn wait_to_end() {
 }
 
 
+// Return ID of the node going into this input field
+fn get_input_node_id(node: &Value, field: &str) -> String {
+    let x = &mut node["inputs"].as_object().unwrap()[field][0].to_string();
+    x.retain(|c| ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'].contains(&c));
+    x.parse::<usize>().unwrap().to_string()
+}
+
+
+
+
+
+
+
+
 fn image_generation_info() -> ImageGenInteractive {
     use clipboard::{ClipboardProvider, ClipboardContext};
 
@@ -488,20 +608,32 @@ fn image_generation_info() -> ImageGenInteractive {
 
 
     // Return ID of the node going into this input field
-    fn get_input_node_id(node: &Value, field: &str) -> String {
-        let x = &mut node["inputs"].as_object().unwrap()[field][0].to_string();
-        x.retain(|c| ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'].contains(&c));
-        x.parse::<usize>().unwrap().to_string()
-    }
+    // fn get_input_node_id(node: &Value, field: &str) -> String {
+    //     let x = &mut node["inputs"].as_object().unwrap()[field][0].to_string();
+    //     x.retain(|c| ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'].contains(&c));
+    //     x.parse::<usize>().unwrap().to_string()
+    // }
 
     // Follow conditioning from Sampler until you reach Text
     fn push_preceding_text(nodes: &Map<String, Value>, mut id: String, prompts: &mut Vec<String>, controlnets: &mut Vec<String>) {
         for _ in 0..nodes.len() {
             let target = nodes.get(&id.to_string()).unwrap();
             match target["class_type"].as_str() {
-                Some("CLIPTextEncode")  => {
+                Some("PromptText") => {
                     prompts.push("\n".to_string() + &target["inputs"].as_object().unwrap()["text"].as_str().unwrap().to_string());
                     return;
+                }
+                Some("CLIPTextEncode")  => {
+                    match target["inputs"].as_object().unwrap()["text"].as_str() {
+                        Some(x) => {
+                            prompts.push("\n".to_string() + &x.to_string());
+                            return;
+                        }
+                        None => {
+                            target["inputs"].as_object().unwrap();
+                            id = get_input_node_id(target, "text");
+                        }
+                    }
                 }
                 Some("ControlNetApply") => {
                     let cid = get_input_node_id(target, "control_net");
@@ -647,6 +779,27 @@ fn print_help() {
                                        e.g. 'yara clear 250 251 252'
         yara config                open directory of config file
         yara cai [URLs]            download CivitAI models/loras/etc, copying relevant info to clipboard
+        yara regen [FILEPATHS]     regenerate images, modifying marked nodes (more info: run 'yara help regen')
+        yara fix [PATHS]           search specified folders or files, try to embed missing workflows into images
+        ");
+}
+
+fn print_help_regen() {
+    println!("
+        Usage: 'yara regen [FILEPATHS]'
+
+        yara 'regen' will regenerate images, modifying any marked nodes.
+
+        To mark a node, modify the node title in ComfyUI (right click -> Title) and add the keyword.
+        Valid keywords:
+            !yum  or  !yara_unmute           Unmute this node. Only valid on KSampler nodes.
+            !ym   or  !yara_mute             Mute this node.
+            !ylh  or  !yara_load_here        Replace this node with a LoadImage node, to load the original image.
+
+        You can specify specific images to regenerate by adding their full filepaths as arguments (in Windows,
+        you can simply drag/drop the files to the terminal window). Alternatively, with no additional arguments,
+        'yara regen' will regenerate all images in the 'ComfyUI/output/regen' folder. The folder to get images from
+        can be customized in the config file ('yara config' -> config.json).
         ");
 }
 
@@ -669,9 +822,9 @@ fn get_path(arg: String) -> PathBuf {
     path
 }
 
-
-
-
+pub fn get_config_file() -> String {
+    get_appdata() + &"/yara/config.json"
+}
 
 // windows-only
 
@@ -679,7 +832,7 @@ fn get_path(arg: String) -> PathBuf {
 fn open_config_dir() {
     println!("Opening folder with config file.");
     Command::new("explorer")
-        .arg(get_appdata() + &"/yara")
+        .arg(get_appdata() + &"\\yara")
         .spawn()
         .unwrap();
 }

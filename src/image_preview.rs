@@ -13,11 +13,11 @@ struct State {
     tex: Texture,
     image: Option<PathBuf>,
     last_image: PathBuf,
-    h: i32,
-    w: i32,
+    h: u32,
+    w: u32,
     ratio: f64,
-    ih: i32,
-    iw: i32,
+    ih: u32,
+    iw: u32,
     base_image: Vec<u8>,
     update_size: bool,
 }
@@ -26,15 +26,16 @@ pub fn notan_main(cfg: &Config) -> Result<(), String> {
     notan::init_with(init)
         .add_plugin(notan::extra::FpsLimit::new(cfg.framerate_cap))
         .add_config(WindowConfig::new()
-            .title("yara")
+            .set_title("yara")
             .set_window_icon_data(Some(include_bytes!("assets/icon.png")))
-            .size(cfg.default_window_size.0, cfg.default_window_size.1)
-            .transparent(true)
-            .always_on_top(cfg.always_on_top)
-            .mouse_passthrough(cfg.mouse_passthrough)
+            .set_size(cfg.default_window_size.0, cfg.default_window_size.1)
+            .set_position(cfg.default_window_position.0, cfg.default_window_position.1)
+            .set_transparent(true)
+            .set_always_on_top(cfg.always_on_top)
+            .set_mouse_passthrough(cfg.mouse_passthrough)
             // .lazy_loop(true)  // greatly reduce CPU usage, but only updates when window is interacted with
-            .resizable(true)
-            .decorations(cfg.window_decorations)
+            .set_resizable(true)
+            .set_decorations(cfg.window_decorations)
         )
         .add_config(DrawConfig)
         .draw(draw)
@@ -42,7 +43,7 @@ pub fn notan_main(cfg: &Config) -> Result<(), String> {
         .build()
 }
 
-fn init(app: &mut App, gfx: &mut Graphics) -> State {
+fn init(_app: &mut App, gfx: &mut Graphics) -> State {
     // app.window().set_position(-807, 188);
 
     // Load the config file
@@ -68,7 +69,6 @@ fn init(app: &mut App, gfx: &mut Graphics) -> State {
         }
     };
 
-    app.window().set_position(cfg.default_window_position.0, cfg.default_window_position.1);
 
     let comfyui_output_directory = cfg.comfyui_output_directory;
 
@@ -148,10 +148,10 @@ fn update(app: &mut App, state: &mut State) {
 
         // Resize image height/width using correct aspect ratio
         state.ih = window.height();
-        state.iw = (window.height() as f64 * state.ratio).floor() as i32;
+        state.iw = (window.height() as f64 * state.ratio).floor() as u32;
         if state.w < state.iw {
             state.iw = window.width();
-            state.ih = (window.width() as f64 / state.ratio).floor() as i32;
+            state.ih = (window.width() as f64 / state.ratio).floor() as u32;
         }
 
         state.update_size = false;

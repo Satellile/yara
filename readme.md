@@ -66,9 +66,7 @@ and you can delete a saved queue with
 
     yara delete [name]
 
-**Warning**: After saving/loading generations, resulting images will not have the workflow embedded in them; i.e. you can no longer drag/drop them into ComfyUI to recreate the workflow. The generation details (prompt, model, loras, seed, etc) are still embedded within the image, though, and you can view that by either reading the image file as a text file, or using Yara's image-generation-info function ('yara image').
-
-From [ComfyUI Github Issue #69](https://github.com/comfyanonymous/ComfyUI/issues/69), importing workflows from the api prompt format is planned, so this will hopefully be fixed later.
+**Warning**: After saving/loading generations, resulting images will not have the workflow embedded in them (i.e. you can no longer drag/drop them into ComfyUI to fully recreate your workflow). The generation details (prompt, model, loras, seed, etc) are still embedded within the image, though. You can view that by (1) reading the image file as a text file, (2) using Yara's image-generation-info function (`yara image`), or (3) dragging/dropping the image into ComfyUI to obtain a basic workflow auto-generated from the generation details. ComfyUI's auto generated workflow won't have any excess nodes in the orignial workflow that weren't used to create the image (such as muted nodes), and the positioning will be in a grid layout. There is also currently a ComfyUI bug with auto-generated workflows regarding nodes that have widget fields converted to inputs.
 
 
 

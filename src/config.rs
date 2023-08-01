@@ -1,18 +1,32 @@
 use std::fs;
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 use native_dialog::FileDialog;
 
+use crate::get_config_file;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     /// How many minutes of inactivity your computer should wait before going to sleep, as set after running "yara melatonin" .
     pub melatonin_sleep_mode_timer: usize,
 
-
     /// The "output" folder in your ComfyUI directory. This is where 'yara preview' will look for newly generated images to display.
     pub comfyui_output_directory: PathBuf,
+
+    /// The "input" folder in your ComfyUI directory.
+    comfyui_input_directory: Option<PathBuf>,
+
+    /// The "regen" folder. Running 'yara regen' will grab every image in this folder, change any nodes marked with !yum, !ym, or !ylh, and regenerate it.
+    /// If no folder is specified, the default path is ComfyUI/output/regen
+    regen_directory: Option<PathBuf>,
+
+    /// After generating images through yara (such as with 'yara load'), the workflow data is not automatically embedded into the image by ComfyUI.
+    /// Yara needs to actively track ComfyUI output and manually embed the workflow data. 
+    /// If Yara is closed or crashes during this process, the workflow will not be added. You can try adding workflows post-generation with 'yara fix'.
+    /// By default, yara only checks the ComfyUI output folder for images missing workflows. You may add additional folders to be checked here. 
+    workflow_recovery_directories: Option<Vec<PathBuf>>,
 
     // pub comfyui_port: usize,
 
@@ -20,7 +34,7 @@ pub struct Config {
     pub default_window_position: (i32, i32),
 
     /// The default window size for 'yara preview'.
-    pub default_window_size: (i32, i32),
+    pub default_window_size: (u32, u32),
 
     /// The filepath to an image file that you want to replace the default base image. The base image is displayed on 'yara preview' when no images are detected in the ComfyUI output folder.
     /// You can direct it to a fully transparent image if you want 'yara preview' to be invisible when the ComfyUI output folder is empty.
@@ -38,9 +52,41 @@ pub struct Config {
     /// The framerate cap. A higher cap increases CPU usage. Framerate should only be relevant when you are moving or resizing the window.
     /// I keep this low (default is 6) to minimize CPU usage, since I'm rarely moving or resizing the window.
     pub framerate_cap: u8,
-
 }
 
+
+impl Config {
+    pub fn get_input_dir(&mut self) -> PathBuf {
+        match &self.comfyui_input_directory {
+            Some(x) => x.to_path_buf(),
+            None => {
+                self.comfyui_input_directory = Some(derive_input_path_from_output_path(&self.comfyui_output_directory.clone()));
+                fs::write(get_config_file(), serde_json::to_string_pretty(&self).unwrap()).unwrap();
+                self.comfyui_input_directory.clone().unwrap()
+            }
+        }
+    }
+    pub fn get_regen_dir(&mut self) -> PathBuf {
+        match &self.regen_directory {
+            Some(x) => x.to_path_buf(),
+            None => {
+                self.regen_directory = Some(derive_regen_path_from_output_path(&self.comfyui_output_directory.clone()));
+                fs::write(get_config_file(), serde_json::to_string_pretty(&self).unwrap()).unwrap();
+                self.regen_directory.clone().unwrap()
+            }
+        }
+    }
+    pub fn get_workflow_recovery_dirs(&mut self) -> Vec<PathBuf> {
+        match &self.workflow_recovery_directories {
+            Some(x) => x.to_vec(),
+            None => {
+                self.workflow_recovery_directories = Some(Vec::from([self.comfyui_output_directory.clone()]));
+                fs::write(get_config_file(), serde_json::to_string_pretty(&self).unwrap()).unwrap();
+                self.workflow_recovery_directories.clone().unwrap()
+            }
+        }
+    }
+}
 
 
 
@@ -61,9 +107,16 @@ pub fn create_new_config() {
     println!("Please select the \"output\" folder in your ComfyUI directory:");
     let comfyui_output_directory: PathBuf = FileDialog::new().show_open_single_dir().unwrap().unwrap();
 
+    let comfyui_input_directory = derive_input_path_from_output_path(&comfyui_output_directory);
+    let regen_directory = derive_regen_path_from_output_path(&comfyui_output_directory);
+    let workflow_recovery_directories = Vec::from([comfyui_output_directory.clone()]);
+
     let cfg = Config {
         melatonin_sleep_mode_timer: 30,
         comfyui_output_directory,
+        comfyui_input_directory: Some(comfyui_input_directory),
+        regen_directory: Some(regen_directory),
+        workflow_recovery_directories: Some(workflow_recovery_directories),
         default_window_position: (0, 0),
         default_window_size: (750, 750),
         base_image: None,
@@ -81,4 +134,40 @@ pub fn create_new_config() {
         Err(e) => println!("    Didn't create 'saved_queues' directory: {e}"),
     };
     fs::write(config_root + &"/config.json", serde_json::to_string_pretty(&cfg).unwrap()).unwrap();
+}
+
+fn derive_input_path_from_output_path(comfyui_output_path: &PathBuf) -> PathBuf {
+    let mut input_path = comfyui_output_path.clone();
+    input_path.pop();
+    input_path.push("input");
+    input_path 
+}
+
+fn derive_regen_path_from_output_path(comfyui_output_path: &PathBuf) -> PathBuf {
+    let mut regen_path = comfyui_output_path.clone();
+    regen_path.push("regen");
+    regen_path 
+}
+
+
+
+
+
+
+
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkflowStorage {
+    pub workflows: HashMap<String, serde_json::Value>,
+}
+
+pub fn create_new_workflow_storage() {
+    let mut workflow_storage_root = get_appdata();
+    workflow_storage_root += "/yara";
+
+    let workflows = WorkflowStorage {
+        workflows: HashMap::new(),
+    };
+    fs::write(workflow_storage_root + &"/workflow_storage.json", serde_json::to_string_pretty(&workflows).unwrap()).unwrap();
 }
