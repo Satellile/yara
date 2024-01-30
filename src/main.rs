@@ -385,7 +385,7 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
     let mut nodemap: HashMap<u64, Value> = HashMap::new();
     let mut sampler_id: u64 = 0;
     for n in nodes {
-        if n.1["class_type"] == "KSampler" {
+        if (n.1["class_type"] == "KSampler") | (n.1["class_type"] == "KSamplerAdvanced") | (n.1["class_type"] == "SamplerCustom") {
             sampler_id = n.0.to_string().parse::<u64>().unwrap();
         }
         nodemap.insert(n.0.to_string().parse::<u64>().unwrap(), n.1.clone());
