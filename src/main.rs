@@ -1,4 +1,4 @@
-use std::io::{Read, BufReader};
+use std::io::{Read, BufReader, Write};
 use std::path::PathBuf;
 use std::fs;
 use std::collections::HashMap;
@@ -18,6 +18,8 @@ mod data;
 use regen::unmute_and_regenerate;
 use fix::{generate_yara_prompts, fix_workflows_in_folders, fix_workflow_in_file};
 use data::YaraPrompt;
+
+const STATUS: &str = "\x1b[36mstatus\x1b[0m:// ";
 
 use config::{
     get_appdata, 
@@ -241,13 +243,12 @@ fn main() {
 
 
 fn save_queue(arg: String, cmd: SaveQueue) {
-    let queue_data: String = get_queue();
-    let json_data: Value = serde_json::from_str(&queue_data).unwrap();
+    let queue_data = get_queue();
 
     let mut prompts: Vec<YaraPrompt> = Vec::new();
 
     if cmd == SaveQueue::All {
-        if let Some(x) = json_data["queue_running"].as_array() {
+        if let Some(x) = queue_data["queue_running"].as_array() {
             for p in x {
                 prompts.push(YaraPrompt::new(p[2].as_object().unwrap().clone(), p[3].as_object().unwrap().get("extra_pnginfo").unwrap().as_object().unwrap().get("workflow").unwrap().clone()));
             }
@@ -255,7 +256,7 @@ fn save_queue(arg: String, cmd: SaveQueue) {
     }
 
     let mut ordered_prompts: Vec<(i64, YaraPrompt)> = Vec::new();
-    if let Some(x) = json_data["queue_pending"].as_array() {
+    if let Some(x) = queue_data["queue_pending"].as_array() {
         for p in x {
             ordered_prompts.push((
                 p[0].as_i64().unwrap(), 
@@ -274,13 +275,12 @@ fn save_queue(arg: String, cmd: SaveQueue) {
 
 
 fn cancel_generations(prompt_numbers: Vec<i64>) {
-    let queue_data: String = get_queue();
-    let json_data: Value = serde_json::from_str(&queue_data).unwrap();
+    let queue_data = get_queue();
 
     let mut ids: Vec<String> = Vec::new();
     let mut interrupt_active_gen = false;
 
-    if let Some(x) = json_data["queue_running"].as_array() {
+    if let Some(x) = queue_data["queue_running"].as_array() {
         for p in x {
             if prompt_numbers.contains(&p[0].as_i64().unwrap()) {
                 println!("  [\x1b[32m{}\x1b[0m] - {}", p[0].as_i64().unwrap(), p[1].to_string());
@@ -289,11 +289,11 @@ fn cancel_generations(prompt_numbers: Vec<i64>) {
         }
     }
 
-    if let Some(x) = json_data["queue_pending"].as_array() {
+    if let Some(x) = queue_data["queue_pending"].as_array() {
         for p in x {
             if prompt_numbers.contains(&p[0].as_i64().unwrap()) {
                 println!("  [\x1b[32m{}\x1b[0m] - {}", p[0].as_i64().unwrap(), p[1].to_string());
-                ids.push(remove_quotes(p[1].to_string()));
+                ids.push(p[1].as_str().unwrap().to_string());
             }
         }
     }
@@ -335,12 +335,11 @@ fn delete_saved_queue(arg: String) {
 
 
 fn examine_queue() {
-    let queue_data = get_queue();
-    let json_data: Value = serde_json::from_str(&queue_data).unwrap();
+    let queue_date = get_queue();
 
     let mut ordered_prompts: Vec<(i64, PromptInfo)> = Vec::new();
 
-    if let Some(x) = json_data["queue_pending"].as_array() {
+    if let Some(x) = queue_date["queue_pending"].as_array() {
         for p in x {
             let pinfo = get_prompt_info(p);
             ordered_prompts.push((p[0].as_i64().unwrap(), pinfo));
@@ -360,7 +359,7 @@ fn examine_queue() {
 
 
 
-    if let Some(x) = json_data["queue_running"].as_array() {
+    if let Some(x) = queue_date["queue_running"].as_array() {
         for p in x {
             let pinfo = get_prompt_info(p);
             print!("\x1b[32mRunning {}: \x1b[0m", pinfo.id);
@@ -414,9 +413,7 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
         }
 
         if let Some(input_model_id) = curr_node["inputs"].get("model") {
-
-            curr_node_id = remove_quotes(input_model_id[0].to_string())
-                .parse::<u64>().unwrap();
+            curr_node_id = input_model_id[0].as_u64().unwrap();
         } 
         else {
             break;
@@ -436,9 +433,9 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
         }
         if curr_node["class_type"] == "CLIPTextEncode" {
             if let Some(input_node_id) = curr_node["inputs"].get("text") {
-                curr_node_id = match remove_quotes(input_node_id[0].to_string()).parse::<u64>() {
-                    Ok(x) => x,
-                    Err(_) => {
+                curr_node_id = match input_node_id[0].as_u64() {
+                    Some(x) => x,
+                    None => {
                         p_prompt = curr_node["inputs"]["text"].to_string();
                         break;
                     }
@@ -450,12 +447,10 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
         }
 
         else if let Some(input_node_id) = curr_node["inputs"].get("positive") {
-            curr_node_id = remove_quotes(input_node_id[0].to_string())
-                .parse::<u64>().unwrap();
+            curr_node_id = input_node_id[0].as_u64().unwrap();
         } 
         else if let Some(input_node_id) = curr_node["inputs"].get("conditioning") {
-            curr_node_id = remove_quotes(input_node_id[0].to_string())
-                .parse::<u64>().unwrap();
+            curr_node_id = input_node_id[0].as_u64().unwrap();
         }
         else {
             break;
@@ -473,68 +468,68 @@ fn get_prompt_info(p: &Value) -> PromptInfo {
 
 }
 
-fn count_queue() -> usize {
-    let queue_data = get_queue();
-    let json_data: Value = serde_json::from_str(&queue_data).unwrap();
-    let mut count = 0;
-    if let Some(x) = json_data["queue_pending"].as_array() {
-        count += x.len();
+fn count_queue(queue_data: Value) -> usize {
+    match (queue_data["queue_pending"].as_array(), queue_data["queue_running"].as_array()) {
+        (Some(x), Some(y)) => { x.len() + y.len() }
+        (None, Some(y)) => { y.len() }
+        (Some(x), None) => { x.len() }
+        (None, None) => { 0 }
     }
-    if let Some(x) = json_data["queue_running"].as_array() {
-        count += x.len();
-    }
-    count
 }
 
+
 fn wait_to_end() {
-    let count = count_queue();
+    let count = count_queue(get_queue());
     let mut starting_count = count;
     let mut old_count = count;
-    println!("Waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
     let now_total_time = Instant::now();
+    let elapsed = format_seconds(now_total_time.elapsed().as_secs());
+    print!("{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+    std::io::stdout().flush().unwrap();
     let mut now_eta = Instant::now();
     let mut tracker = Instant::now();
     loop {
-        let queue_data: String = get_queue();
-        let json_data: Value = serde_json::from_str(&queue_data).unwrap();
-        if let Some(x) = json_data["queue_running"].as_array() {
-            if let Some(y) = json_data["queue_pending"].as_array() {
-                if x.is_empty() & y.is_empty() {
-                    println!("Queue is empty.");
-                    break;
-                }
+        let queue_data = get_queue();
+        if let (Some(x), Some(y)) = (queue_data["queue_running"].as_array(), queue_data["queue_pending"].as_array()) {
+            if x.is_empty() & y.is_empty() {
+                println!("\nQueue is empty.");
+                break;
             }
         }
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(1));
 
         // Every 5 minutes, tell user the remaining number of items
-        if tracker.elapsed().as_secs() > 300 {
+        if tracker.elapsed().as_secs() > 5 {
             tracker = Instant::now();
-            let count = count_queue();
+            let count = count_queue(queue_data);
 
             if old_count < count { // More gens were added; reset 
-                println!("Detected new queues added; resetting ETA calculations");
+                println!("\nDetected new queues added; resetting ETA calculations");
                 starting_count = count;
                 now_eta = Instant::now();
-                println!("Waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+                // let elapsed = format_seconds(now_total_time.elapsed().as_secs());
+                // print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+                // std::io::stdout().flush().unwrap();
             } 
-            else if starting_count == count { // No queues have completed. We have no ETA
-                println!("Waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
-            }
-            else {
+            // else if starting_count == count { // No queues have completed. We have no ETA
+                // let elapsed = format_seconds(now_total_time.elapsed().as_secs());
+                // print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+                // std::io::stdout().flush().unwrap();
+            // }
+            else if starting_count != count {
                 let avg_gen_time = now_eta.elapsed().as_secs() as f64 / (starting_count - count) as f64; // Average seconds  for one gen. plus/minus 5 sec
-                let eta_secs = (avg_gen_time * count as f64).round() as u64;
-                let eta_hours = (eta_secs / 60) / 60;
-                let eta_minutes = (eta_secs - (eta_hours * 60 * 60)) / 60;
-                println!("Waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining) [eta: {eta_hours} hrs {eta_minutes} min]");
+                let elapsed = format_seconds(now_total_time.elapsed().as_secs());
+                let eta = format_seconds((avg_gen_time * count as f64).round() as u64);
+                print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining) [eta: {eta}]");
+                std::io::stdout().flush().unwrap();
             }
             old_count = count;
         }
+        let elapsed = format_seconds(now_total_time.elapsed().as_secs());
+        print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+        std::io::stdout().flush().unwrap();
     }
-    let secs = now_total_time.elapsed().as_secs();
-    let hours = (secs / 60) / 60;
-    let minutes = (secs - (hours * 60 * 60)) / 60;
-    println!("Finished waiting after {hours} hrs {minutes} min");
+    println!("\nFinished waiting - took {}", format_seconds(now_total_time.elapsed().as_secs()));
 }
 
 
@@ -579,7 +574,6 @@ fn image_generation_info() -> ImageGenInteractive {
     let text = String::from_utf8_lossy(&buffer);
 
 
-
     // get prompt json
     let text = &text.split("tEXtprompt\0{").map(|x| x.to_string()).collect::<Vec<String>>()[1];
     let mut brackets = 1;
@@ -595,15 +589,6 @@ fn image_generation_info() -> ImageGenInteractive {
     let prompt_json: Value = serde_json::from_str(&prompt_string).unwrap();
     let nodes = prompt_json.as_object().unwrap();
 
-
-
-
-    // Return ID of the node going into this input field
-    // fn get_input_node_id(node: &Value, field: &str) -> String {
-    //     let x = &mut node["inputs"].as_object().unwrap()[field][0].to_string();
-    //     x.retain(|c| ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'].contains(&c));
-    //     x.parse::<usize>().unwrap().to_string()
-    // }
 
     // Follow conditioning from Sampler until you reach Text
     fn push_preceding_text(nodes: &Map<String, Value>, mut id: String, prompts: &mut Vec<String>, controlnets: &mut Vec<String>) {
@@ -636,8 +621,6 @@ fn image_generation_info() -> ImageGenInteractive {
                     id = get_input_node_id(target, "conditioning");
                 }
             }
-
-
         }
         panic!("Failed to find the originating node for a sampler's input positive/negative text");
     }
@@ -718,9 +701,6 @@ fn image_generation_info() -> ImageGenInteractive {
     let x = serde_json::to_string_pretty(&prompt_json).unwrap();
     ctx.set_contents(x).unwrap();
     println!("Full generation data copied to clipboard.");
-    
-
-
     println!("--------------\n");
     return ImageGenInteractive::Repeat;
 }
@@ -729,21 +709,12 @@ fn image_generation_info() -> ImageGenInteractive {
 
 
 
-fn get_queue() -> String {
+fn get_queue() -> Value {
     let mut response = isahc::get("http://127.0.0.1:8188/queue").unwrap();
-
-    // println!("Status: {:?}", response.status());
-    // println!("Body: {:?}", response.body());
-    // println!("Body is empty: {:?}", response.body().is_empty());
-
     let mut buf = String::new();
     response.body_mut().read_to_string(&mut buf).unwrap();
-    buf
-}
-fn remove_quotes(mut string: String) -> String {
-    string.pop();
-    string.remove(0);
-    string
+    let json_data: Value = serde_json::from_str(&buf).unwrap();
+    json_data
 }
 
 
@@ -815,6 +786,12 @@ fn get_saved_queue_path(queue_name: String) -> PathBuf {
 
 pub fn get_config_file() -> String {
     get_appdata() + &"/yara/config.json"
+}
+pub fn format_seconds(secs: u64) -> String {
+    let hours = (secs / 60) / 60;
+    let minutes = (secs - (hours * 60 * 60)) / 60;
+    let seconds = secs - (hours * 60 * 60) - (minutes * 60);
+    format!("{hours:0>2}:{minutes:0>2}:{seconds:0>2}")
 }
 
 // windows-only

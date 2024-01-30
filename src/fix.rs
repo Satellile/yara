@@ -7,9 +7,10 @@ use std::time::Instant;
 
 use crate::WorkflowStorage;
 use crate::data::{YaraPrompt, hash_nodemap};
+use crate::{STATUS, format_seconds};
 
 const API_DATA_MARKER: [u8; 10] = [116, 69, 88, 116, 112, 114, 111, 109, 112, 116]; // "tEXtprompt"
-const STATUS: &str = "\x1b[36mstatus\x1b[0m:// ";
+
 
 fn save_hash_and_workflow(x: &YaraPrompt, workflow_file: &str, storage: &mut WorkflowStorage) {
     storage.workflows.insert(x.hash.clone(), x.workflow.clone());
@@ -160,12 +161,6 @@ fn get_api_hash_from_image_file(path: &Path) -> String {
     let x: serde_json::Map<String, Value> = serde_json::from_slice(&bytes).unwrap();
     let hash = hash_nodemap(&x);
     hash
-}
-fn format_seconds(secs: u64) -> String {
-    let hours = (secs / 60) / 60;
-    let minutes = (secs - (hours * 60 * 60)) / 60;
-    let seconds = secs - (hours * 60 * 60) - (minutes * 60);
-    format!("{hours:0>2}:{minutes:0>2}:{seconds:0>2}")
 }
 fn get_history() -> Value {
     let mut response = isahc::get("http://127.0.0.1:8188/history").unwrap();

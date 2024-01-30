@@ -384,12 +384,7 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
     for node in new_api_nodes {
         json_prompt.insert(node.id.to_string(), Value::Object(node.contents));
     }
-    // let mut prompt = serde_json::Map::new();
-    // prompt.insert("prompt".to_string(), Value::Object(json_prompt));
-
     println!("{filename} - {yara_unmute_counter} nodes unmuted, {yara_mute_counter} nodes muted, {yara_load_here_counter} nodes replaced with LoadImage node.");
-
-
     YaraPrompt::new(json_prompt, flow_data)
 }
 
