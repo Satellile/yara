@@ -5,18 +5,19 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YaraPrompt {
-    pub prompt: Value,
+    pub prompt: serde_json::Map<String, Value>,
     pub workflow: Value,
     pub hash: String,
 }
 impl YaraPrompt {
-    pub fn new(prompt: Value, workflow: Value) -> YaraPrompt {
-        let nodemap = prompt.as_object().unwrap().get("prompt").unwrap().as_object().unwrap();
-        let x = hash_nodemap(nodemap);
+    pub fn new(nodemap: serde_json::Map<String, Value>, workflow: Value) -> YaraPrompt {
+        let hash = hash_nodemap(&nodemap);
+        let mut prompt = serde_json::Map::new();
+        prompt.insert("prompt".to_string(), Value::Object(nodemap));
         YaraPrompt {
             prompt,
             workflow,
-            hash: x,
+            hash,
         }
     }
     pub fn generate(&self) -> String {

@@ -244,29 +244,31 @@ fn save_queue(arg: String, cmd: SaveQueue) {
     let queue_data: String = get_queue();
     let json_data: Value = serde_json::from_str(&queue_data).unwrap();
 
-    let mut prompts: Vec<Prompt> = Vec::new();
+    let mut prompts: Vec<YaraPrompt> = Vec::new();
 
     if cmd == SaveQueue::All {
         if let Some(x) = json_data["queue_running"].as_array() {
             for p in x {
-                prompts.push(Prompt{prompt:p[2].clone()});
+                prompts.push(YaraPrompt::new(p[2].as_object().unwrap().clone(), p[3].as_object().unwrap().get("extra_pnginfo").unwrap().as_object().unwrap().get("workflow").unwrap().clone()));
             }
         }
     }
 
-
-    let mut ordered_prompts: Vec<(i64, Prompt)> = Vec::new();
+    let mut ordered_prompts: Vec<(i64, YaraPrompt)> = Vec::new();
     if let Some(x) = json_data["queue_pending"].as_array() {
         for p in x {
-            ordered_prompts.push((p[0].as_i64().unwrap(), Prompt{prompt:p[2].clone()}));
+            ordered_prompts.push((
+                p[0].as_i64().unwrap(), 
+                YaraPrompt::new(p[2].as_object().unwrap().clone(), p[3].as_object().unwrap().get("extra_pnginfo").unwrap().as_object().unwrap().get("workflow").unwrap().clone())
+            ));
         }
     }
     ordered_prompts.sort_by(|a, b| a.0.cmp(&b.0));
-    let (_, x): (Vec<i64>, Vec<Prompt>) = ordered_prompts.iter().cloned().unzip();
+    let (_, x): (Vec<i64>, Vec<YaraPrompt>) = ordered_prompts.iter().cloned().unzip();
     prompts.extend(x);
 
-    let path = get_path(arg);
-    let _ = serde_json::to_writer(&fs::File::create(path.clone()).unwrap(), &prompts);
+    let path = get_saved_queue_path(arg);
+    serde_json::to_writer(&fs::File::create(path.clone()).unwrap(), &prompts).unwrap();
     println!("Saved to {}", path.display());
 }
 
@@ -315,7 +317,7 @@ fn cancel_generations(prompt_numbers: Vec<i64>) {
 
 
 fn load_queue(arg: String) {
-    let path = get_path(arg);
+    let path = get_saved_queue_path(arg);
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
     let prompts: Vec<Value> = serde_json::from_reader(reader).unwrap();
@@ -335,7 +337,7 @@ fn load_queue(arg: String) {
 
 
 fn delete_saved_queue(arg: String) {
-    let path = get_path(arg);
+    let path = get_saved_queue_path(arg);
     fs::remove_file(path).unwrap();
 }
 
@@ -814,11 +816,11 @@ fn print_files() {
     }
 }
 
-fn get_path(arg: String) -> PathBuf {
+fn get_saved_queue_path(queue_name: String) -> PathBuf {
     let mut path: PathBuf = get_appdata().into();
     path.push("yara");
     path.push("saved_queues");
-    path.push(arg + &".json");
+    path.push(queue_name + &".json");
     path
 }
 
