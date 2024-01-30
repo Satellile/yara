@@ -102,7 +102,7 @@ fn main() {
             }
             "l" | "load" => {
                 if let Some(arg) = args.next() {
-                    load_queue(arg);
+                    load_queue(arg, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
                 } 
                 else { print_help(); }
             }
@@ -316,23 +316,12 @@ fn cancel_generations(prompt_numbers: Vec<i64>) {
 
 
 
-fn load_queue(arg: String) {
+fn load_queue(arg: String, storage: &mut WorkflowStorage, workflow_file: &str, output_dir: PathBuf) {
     let path = get_saved_queue_path(arg);
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
-    let prompts: Vec<Value> = serde_json::from_reader(reader).unwrap();
-
-    for p in prompts {
-        let data = serde_json::to_string(&p).unwrap();
-
-        let mut response = isahc::post("http://127.0.0.1:8188/prompt", data).unwrap();
-
-        let mut buf = String::new();
-        response.body_mut().read_to_string(&mut buf).unwrap();
-        println!("Body String: {buf}");
-    }
-
-    examine_queue();
+    let yara_prompts: Vec<YaraPrompt> = serde_json::from_reader(reader).unwrap();
+    generate_yara_prompts(yara_prompts, storage, workflow_file, output_dir);
 }
 
 
