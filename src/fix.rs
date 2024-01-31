@@ -94,7 +94,10 @@ pub fn generate_yara_prompts(
         // Exit if all prompts are either Finished (or already existed).
         let finished = prompt_ids.iter().fold(true, |acc, x| if x.1 == &PIDStatus::Queued { false } else { acc });
         if finished { break; }
+        // Exit if there's no more prompts in the queue
         let count = count_queue(get_queue());
+        if count == 0 { break; }
+
         print!("\r{STATUS}waiting... [ {} ] ({count} prompts in queue)               ", format_seconds(timer.elapsed().as_secs()));
         std::io::stdout().flush().unwrap();
 
