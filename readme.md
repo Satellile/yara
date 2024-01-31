@@ -8,9 +8,10 @@ It can:
 
 - **Pause queue generations by saving/loading them to files**
 - **Cancel queued generations by their number/ID**
-- **Toggle sleep mode, to prevent your computer from going to sleep and halting ComfyUI**
 - **Examine the prompts and models in the running/pending queue**
-- **Wait until all jobs/prompts are finished, estimating the remaining time**
+- **Quickly regenerate many images with certain changes (specified nodes unmuted, muted, or replaced by LoadImage nodes)**
+- **Toggle sleep mode, to prevent your computer from going to sleep and halting ComfyUI**
+- **Hold your terminal until all jobs/prompts are finished**
 - **Create an always-on-top window to display the latest generated image**
 - **Display an image's embedded generation data**
 - **Help download from CivitAI**
@@ -27,10 +28,10 @@ It can:
 ### [Direct link to download](https://github.com/Satellile/yara/releases/download/latest/yara.exe)
 
 Download "yara.exe". 
-Open a terminal in the same directory/folder as "yara.exe", and run the program through the terminal by simply typing "yara".
+Open a terminal in the same directory/folder as "yara.exe", and run the program through the terminal by simply typing `yara`.
 
 The first time you run, you must select your ComfyUI output folder, and then a config file will automatically be created.
-You can open the folder containing the config file with the argument "yara config", to edit it manually (most of the options are just for configuring "yara preview").
+You can open the folder containing the config file with the argument `yara config`, to edit it manually (most of the options are just for configuring `yara preview`).
 
 </br></br>
 
@@ -38,13 +39,14 @@ You can open the folder containing the config file with the argument "yara confi
 1. [Saving, Loading, Deleting, and Listing Queues](#saving-queues)
 2. [Examining the Running Queue](#examining-the-running-queue)
 3. [Deleting Generations by Number](#deleting-generations-by-number)
-4. [Toggle Sleep Mode](#toggle-sleep-mode)
-5. [Check an Image's Embedded Generation Info](#imagegen)
-6. [Create a Window Displaying the Most Recently Generated Image](#create-a-window-displaying-the-most-recently-generated-image)
-7. [Open the Folder Containing the Config File](#open-the-folder-containing-the-config-file)
-8. [Download From CivitAI](#download-from-civitai)
-9. [Print Help](#print-help)
-10. [Aliases](#aliases)
+4. [Regenerating Images With Modifications](#regenerating-images-with-modifications)
+5. [Toggle Sleep Mode](#toggle-sleep-mode)
+6. [Check an Image's Embedded Generation Info](#imagegen)
+7. [Create a Window Displaying the Most Recently Generated Image](#create-a-window-displaying-the-most-recently-generated-image)
+8. [Open the Folder Containing the Config File](#open-the-folder-containing-the-config-file)
+9. [Download From CivitAI](#download-from-civitai)
+10 [Print Help](#print-help).
+11. [Aliases](#aliases)
 
 ## Saving, Loading, Deleting, and Listing Queues <a name="saving-queues"></a>
 
@@ -58,6 +60,8 @@ Now, you may clear out the queue or close ComfyUI. When you later want to resume
  
     yara load [name]
 
+After the prompts have been sent to ComfyUI, Yara will wait for ComfyUI to finish generating the images before embedding workflow data into them. If you exit Yara before all images have generated, the loaded images won't have workflow metadata; you can fix this by using `yara fix`.
+
 You can print out a list of all saved queues by typing
 
     yara list
@@ -65,8 +69,6 @@ You can print out a list of all saved queues by typing
 and you can delete a saved queue with 
 
     yara delete [name]
-
-**Warning**: After saving/loading generations, resulting images will not have the workflow embedded in them (i.e. you can no longer drag/drop them into ComfyUI to fully recreate your workflow). The generation details (prompt, model, loras, seed, etc) are still embedded within the image, though. You can view that by (1) reading the image file as a text file, (2) using Yara's image-generation-info function (`yara image`), or (3) dragging/dropping the image into ComfyUI to obtain a basic workflow auto-generated from the generation details. ComfyUI's auto generated workflow won't have any excess nodes in the orignial workflow that weren't used to create the image (such as muted nodes), and the positioning will be in a grid layout. There is also currently a ComfyUI bug with auto-generated workflows regarding nodes that have widget fields converted to inputs.
 
 
 
@@ -99,6 +101,40 @@ Deleting many prompts in ComfyUI is cumbersome. When you accidentally queue prom
 
 
 
+## Regenerating Images With Modifications
+
+This feature allows you to quickly regenerate many images quickly with certain changes to the workflow.
+
+
+
+Node titles are used to denote which nodes you want to change. In ComfyUI, set a custom title (right click a node => "Title") on the node you want to change, and edit it to include one of Yara's commands.
+
+Available commands are:
+
+| Command                   | Alias |  Function      | Limitations                                                    |
+|---------------------------|-------------------------------------------|-----------------------------|--------------------------------------------|
+| !yara_mute | !yum | Unmute this node. | Only available for KSampler, KSamplerAdvanced, and SamplerCustom nodes.
+| !yara_unmute | !ym | Mute this node. | 
+| !yara_load_here | !ylh | Replace this node with a LoadImage node, loading the original generated image here | Only available on nodes outputting "IMAGE"
+
+Generate the image in ComfyUI. When you want to regenerate it with the nodes modified, run
+
+    yara regen [filepath]
+
+to regenerate the image. You can include as many files as you want, separated by spaces; I'd recommend selecting them in a file browser and dragging/dropping into the terminal window.
+
+Alternatively, you can move the images you wish to regenerate into a folder, and simply run 
+
+    yara regen
+
+without any arguments, to regenerate every image in that folder. This folder can be customized in the config file (`yara config`); by default it looks for images in `ComfyUI/output/regen`.
+
+This feature is most useful when you have a 2-pass workflow (where you generate a low-res image, upscale it, and do another KSampler pass with low denoising). You can mute the second sampler and set `!yara_unmute`, generate many low-res images, and select the one(s) you want to do the second pass on. Then, instead of manually loading the image workflow and unmuting the node, simply pass the image to `yara regen`. You can also set `!yara_load_here` on the VAEEncode leading to the second sampler, and `!yara_mute` on the SaveImage output from the first sampler, to avoid regenerating the low-res image, saving time if you're on CPU or an old GPU.
+
+To work, this feature requires ComfyUI workflow metadata embedded into the image. Thus, it may not function with images generated through 3rd-party tools.
+
+
+
 ## Toggle Sleep Mode
 
 ComfyUI doesn't prevent Windows from sleeping, but sleep mode halts ComfyUI generations. You can use yara to conveniently toggle sleep mode with 
@@ -115,8 +151,6 @@ By default, 'melatonin' will have Windows sleep after 30 minutes of inactivity. 
 To hold the terminal until the ComfyUI queue is empty, run
 
     yara wait
-
-While waiting, it will print the number of remaining generations every five minutes. It also will estimate (incredibly roughly and naively) the amount of time until all generations are finished.
 
 This is mostly useful just for halting the terminal until ComfyUI generations are done. Often, I disable sleep mode, then chain 'yara wait' with 'yara melatonin'. This lets me queue up a bunch of generations, and go leave my computer - when ComfyUI is finished running, sleep mode will be re-enabled, so my computer won't be running needlessly. I also might use this to execute other commands once ComfyUI is finished, such as if I want to generate images and train a LorA overnight, but don't want both to be running simultaneously.
 
@@ -138,7 +172,6 @@ Model(s), LorA(s), positive prompt text(s), and negative prompt text(s) will be 
 
 (note: you can just drag/drop the image into the terminal window, and it will automatically input the image's filepath).
 
-This is particularly useful since when the workflow isn't embedded into the image (as discussed in the "[Saving, Loading, Deleting, and Listing Queues](#saving-queues)" section above).
 
 
 ## Create a Window Displaying the Most Recently Generated Image
@@ -147,7 +180,7 @@ If you want to preview the generation output without having the ComfyUI window o
 
     yara preview
 
-to open an always-on-top window that automatically displays the most recently generated image. Settings to configure the window location/size, or to toggle always-on-top/mouse passthrough and more are available in the config file ('yara config').
+to open an always-on-top window that automatically displays the most recently generated image. Settings to configure the window location/size, or to toggle always-on-top/mouse passthrough and more are available in the config file (`yara config`).
 
 
 ## Open the Folder Containing the Config File
@@ -194,6 +227,7 @@ Some of the commands can be shortened, for convenience:
 | preview | p | 
 | image | i | 
 | help | h | 
+| regen | rg |
 
 
 
@@ -205,6 +239,6 @@ Some of the commands can be shortened, for convenience:
 
 If you have an issue, question, or request for some feature/config option, feel free to make an issue or message me.
 
-This is developed mainly with Windows in mind. There's a Linux release, but it's missing some features (sleep mode toggles) and when I very briefly tested it, the image preview feature didn't work. I mostly use Windows and my time is limited (as is everybody's), so it's not something I'm prioritizing, but if anybody wants to use it on Linux, feel free to make a pull request, a GitHub issue, or just send me a message so I know people are interested in it.
+This is developed mainly with Windows in mind. There's a Linux release, but it's missing some features (sleep mode toggles) and when I very briefly tested it, the image preview feature didn't work. I mostly use Windows and Linux downloads were a very small percentage of total downloads, so it's not something I'm prioritizing. If anybody wants to use it on Linux, feel free to make a pull request, a GitHub issue, or just send me a message so I know people are interested in it.
 
-This is built for the latest ComfyUI release binary as of July 22, 2023. Future ComfyUI versions may change the API and thus break parts of this program.
+This is built for the latest ComfyUI release binary as of January 31, 2024. Future ComfyUI versions may change the API and thus break parts of this program.
