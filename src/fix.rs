@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::WorkflowStorage;
+use crate::{WorkflowStorage, count_queue, get_queue};
 use crate::data::{YaraPrompt, hash_nodemap};
 use crate::{STATUS, format_seconds};
 
@@ -102,7 +102,8 @@ pub fn generate_yara_prompts(
         // Exit if all prompts are either Finished (or already existed).
         let finished = prompt_ids.iter().fold(true, |acc, x| if x.1 == &PIDStatus::Queued { false } else { acc });
         if finished { break; }
-        print!("\r{STATUS}waiting... [ {} ]                ", format_seconds(timer.elapsed().as_secs()));
+        let count = count_queue(get_queue());
+        print!("\r{STATUS}waiting... [ {} ] ({count} prompts in queue)               ", format_seconds(timer.elapsed().as_secs()));
         std::io::stdout().flush().unwrap();
 
         std::thread::sleep(std::time::Duration::from_secs(3));
@@ -111,7 +112,6 @@ pub fn generate_yara_prompts(
 
         if stored_history != new_history {
             stored_history = new_history.clone();
-            println!("\n{STATUS}a finished generation was detected");
 
             for gpid in new_history.as_object().unwrap().keys() {
                 if let Some(status) = prompt_ids.get_mut(gpid) {
@@ -136,7 +136,7 @@ pub fn generate_yara_prompts(
                                 if let Some(workflow) = storage.workflows.get(&hash) {
                                     inject_workflow_into_image(&path, &workflow);
                                     remove_workflow_from_storage(&hash, workflow_file, &mut storage);
-                                    println!("{STATUS}embedded workflow into ({subfolder}/{filename})");
+                                    println!("{STATUS}embedded workflow into {subfolder}/{filename}");
                                     workflows_embedded += 1;
                                 } else {
                                     println!("//\x1b[31m WARNING\x1b[0m // Hash doesn't match (unexpected) // hash {hash}, file {filename}");
