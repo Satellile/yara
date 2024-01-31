@@ -393,18 +393,17 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
         reader.read_exact(&mut buf).unwrap(); // UnexpectedEof: no header found
         for i in 0..(header.len()-4) {
             if header[i..(i+5)] == buf {
-                // println!("\nmatched '{}' as subset of header", String::from_utf8_lossy(&buf));
                 break 'search_for_marker;
             }
         }
     }
 
     let mut byte = [0u8; 1];
-    let mut api_data: Vec<u8> = Vec::new();
+    let mut data: Vec<u8> = Vec::new();
     loop {
         reader.read_exact(&mut byte).unwrap();
         if byte == [b'{'] {
-            api_data.push(byte[0]);
+            data.push(byte[0]);
             break;
         }
     }
@@ -416,10 +415,10 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
             [b'}'] => opening_bracket_count -= 1,
             _ => (),
         }
-        api_data.push(byte[0]);
+        data.push(byte[0]);
     }
 
-    api_data
+    data
 }
 fn link_input_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> bool {
     if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.from_node_id).unwrap()).unwrap().kind {

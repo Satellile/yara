@@ -25,7 +25,6 @@ fn remove_workflow_from_storage(hash: &str, workflow_file: &str, storage: &mut W
 pub fn fix_workflows_in_folders(mut storage: &mut WorkflowStorage, workflow_file: &str, dirs: Vec<PathBuf>) {
     for dir in dirs {
         for entry in std::fs::read_dir(dir).unwrap() {
-            println!();
             let path = entry.unwrap().path();
             if !path.is_dir() {
                 if let Some(extension) = path.extension() {
@@ -172,7 +171,6 @@ fn inject_workflow_into_image(image_path: &PathBuf, workflow: &Value) {
     let file = fs::File::open(image_path).unwrap();
     let mut reader = BufReader::new(file);
 
-    let header: [u8; 10] = [116, 69, 88, 116, 112, 114, 111, 109, 112, 116]; // "tEXtprompt"
     let mut bytes: Vec<u8> = Vec::new();
 
     // look for textprompt header chars
@@ -180,8 +178,8 @@ fn inject_workflow_into_image(image_path: &PathBuf, workflow: &Value) {
     'search_for_marker: loop {
         reader.read_exact(&mut buf).unwrap(); // UnexpectedEof: no header found
         bytes.extend(buf);
-        for i in 0..(header.len()-4) {
-            if header[i..(i+5)] == buf {
+        for i in 0..(API_DATA_MARKER.len()-4) {
+            if API_DATA_MARKER[i..(i+5)] == buf {
                 break 'search_for_marker;
             }
         }
