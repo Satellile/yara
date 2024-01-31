@@ -29,12 +29,13 @@ pub fn fix_workflows_in_folders(mut storage: &mut WorkflowStorage, workflow_file
             if !path.is_dir() {
                 if let Some(extension) = path.extension() {
                     if extension == "png" {
-                        let hash = get_api_hash_from_image_file(path.as_path());
-                        if let Some(workflow) = storage.workflows.get(&hash) {
-                            inject_workflow_into_image(&path, &workflow);
-                            remove_workflow_from_storage(&hash, workflow_file, &mut storage);
-                            println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
-                        }
+                        if let Ok(hash) = get_api_hash_from_image_file(path.as_path()) {
+                            if let Some(workflow) = storage.workflows.get(&hash) {
+                                inject_workflow_into_image(&path, &workflow);
+                                remove_workflow_from_storage(&hash, workflow_file, &mut storage);
+                                println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
+                            }
+                        } else { println!("Failed to get api info and hash from file: {:?}", path.file_name().unwrap()); }
                     }
                 }
             }
@@ -47,7 +48,7 @@ pub fn fix_workflow_in_file(mut storage: &mut WorkflowStorage, workflow_file: &s
     if !path.is_dir() {
         if let Some(extension) = path.extension() {
             if extension == "png" {
-                let hash = get_api_hash_from_image_file(path.as_path());
+                let hash = get_api_hash_from_image_file(path.as_path()).unwrap();
                 if let Some(workflow) = storage.workflows.get(&hash) {
                     inject_workflow_into_image(&path, &workflow);
                     remove_workflow_from_storage(&hash, workflow_file, &mut storage);
@@ -131,7 +132,7 @@ pub fn generate_yara_prompts(
                                 path.push(filename);
 
                                 // Hash the API data, inject workflow if it matches
-                                let hash = get_api_hash_from_image_file(path.as_path());
+                                let hash = get_api_hash_from_image_file(path.as_path()).unwrap();
                                 if let Some(workflow) = storage.workflows.get(&hash) {
                                     inject_workflow_into_image(&path, &workflow);
                                     remove_workflow_from_storage(&hash, workflow_file, &mut storage);
@@ -153,13 +154,13 @@ pub fn generate_yara_prompts(
 }
 
 
-fn get_api_hash_from_image_file(path: &Path) -> String {
-    let file = fs::File::open(path).unwrap();
+fn get_api_hash_from_image_file(path: &Path) -> Result<String, std::io::Error> {
+    let file = fs::File::open(path)?;
     let mut reader = BufReader::new(file);
-    let bytes = crate::regen::match_header_string_and_read_data(&mut reader, API_DATA_MARKER);
-    let x: serde_json::Map<String, Value> = serde_json::from_slice(&bytes).unwrap();
+    let bytes = crate::regen::match_header_string_and_read_data(&mut reader, API_DATA_MARKER)?;
+    let x: serde_json::Map<String, Value> = serde_json::from_slice(&bytes)?;
     let hash = hash_nodemap(&x);
-    hash
+    Ok(hash)
 }
 fn get_history() -> Value {
     let mut response = isahc::get("http://127.0.0.1:8188/history").unwrap();

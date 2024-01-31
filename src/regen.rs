@@ -91,12 +91,12 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
     let mut reader = BufReader::new(file);
 
     let api_data_marker: [u8; 10] = [116, 69, 88, 116, 112, 114, 111, 109, 112, 116]; // "tEXtprompt"
-    let bytes = match_header_string_and_read_data(&mut reader, api_data_marker);
+    let bytes = match_header_string_and_read_data(&mut reader, api_data_marker).unwrap();
     let api_data: Value = serde_json::from_slice(&bytes).unwrap();
     // println!("     API Data:\n{}\n", api_data);
 
     let flow_data_marker: [u8; 10] = [116, 69, 88, 116, 119, 111, 114, 107, 102, 108]; // "tEXtworkfl"
-    let bytes = match_header_string_and_read_data(&mut reader, flow_data_marker);
+    let bytes = match_header_string_and_read_data(&mut reader, flow_data_marker).unwrap();
     let mut flow_data: Value = serde_json::from_slice(&bytes).unwrap();
     // println!("    Flow Data:\n{}\n", flow_data);
 
@@ -387,10 +387,10 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
 
 
 
-pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, header: [u8; 10]) -> Vec<u8> {
+pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, header: [u8; 10]) -> Result<Vec<u8>, std::io::Error> {
     let mut buf = [0u8; 5];
     'search_for_marker: loop {
-        reader.read_exact(&mut buf).unwrap(); // UnexpectedEof: no header found
+        reader.read_exact(&mut buf)?; // UnexpectedEof: no header found
         for i in 0..(header.len()-4) {
             if header[i..(i+5)] == buf {
                 break 'search_for_marker;
@@ -401,7 +401,7 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
     let mut byte = [0u8; 1];
     let mut data: Vec<u8> = Vec::new();
     loop {
-        reader.read_exact(&mut byte).unwrap();
+        reader.read_exact(&mut byte)?;
         if byte == [b'{'] {
             data.push(byte[0]);
             break;
@@ -409,7 +409,7 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
     }
     let mut opening_bracket_count = 1;
     while opening_bracket_count > 0 {
-        reader.read_exact(&mut byte).unwrap();
+        reader.read_exact(&mut byte)?;
         match byte {
             [b'{'] => opening_bracket_count += 1,
             [b'}'] => opening_bracket_count -= 1,
@@ -418,7 +418,7 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
         data.push(byte[0]);
     }
 
-    data
+    Ok(data)
 }
 fn link_input_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> bool {
     if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.from_node_id).unwrap()).unwrap().kind {
