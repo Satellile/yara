@@ -480,14 +480,10 @@ fn count_queue(queue_data: Value) -> usize {
 
 fn wait_to_end() {
     let count = count_queue(get_queue());
-    let mut starting_count = count;
-    let mut old_count = count;
     let now_total_time = Instant::now();
     let elapsed = format_seconds(now_total_time.elapsed().as_secs());
     print!("{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
     std::io::stdout().flush().unwrap();
-    let mut now_eta = Instant::now();
-    let mut tracker = Instant::now();
     loop {
         let queue_data = get_queue();
         if let (Some(x), Some(y)) = (queue_data["queue_running"].as_array(), queue_data["queue_pending"].as_array()) {
@@ -498,33 +494,7 @@ fn wait_to_end() {
         }
         thread::sleep(Duration::from_secs(1));
 
-        // Every 5 minutes, tell user the remaining number of items
-        if tracker.elapsed().as_secs() > 5 {
-            tracker = Instant::now();
-            let count = count_queue(queue_data);
-
-            if old_count < count { // More gens were added; reset 
-                println!("\nDetected new queues added; resetting ETA calculations");
-                starting_count = count;
-                now_eta = Instant::now();
-                // let elapsed = format_seconds(now_total_time.elapsed().as_secs());
-                // print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
-                // std::io::stdout().flush().unwrap();
-            } 
-            // else if starting_count == count { // No queues have completed. We have no ETA
-                // let elapsed = format_seconds(now_total_time.elapsed().as_secs());
-                // print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
-                // std::io::stdout().flush().unwrap();
-            // }
-            else if starting_count != count {
-                let avg_gen_time = now_eta.elapsed().as_secs() as f64 / (starting_count - count) as f64; // Average seconds  for one gen. plus/minus 5 sec
-                let elapsed = format_seconds(now_total_time.elapsed().as_secs());
-                let eta = format_seconds((avg_gen_time * count as f64).round() as u64);
-                print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining) [eta: {eta}]");
-                std::io::stdout().flush().unwrap();
-            }
-            old_count = count;
-        }
+        let count = count_queue(queue_data);
         let elapsed = format_seconds(now_total_time.elapsed().as_secs());
         print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
         std::io::stdout().flush().unwrap();
