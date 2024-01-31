@@ -226,7 +226,8 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
 
         // Create input fields
         for input_widget in new_node_flowdata.inputs? {
-            let (input_node_id, input_node_slot) = get_input_source(&flow_links, &flow_nodes, input_widget.link_id?);
+            let Some((input_node_id, input_node_slot)) = get_input_source(&flow_links, &flow_nodes, input_widget.link_id?)
+                else { println!("{fail_str} get an input source for !yara_unmute node"); return None; };
             inputs.insert(
                 input_widget.name.to_string(), 
                 serde_json::from_str(&format!(r#"["{input_node_id}", {input_node_slot}]"#)).ok()?
@@ -275,7 +276,8 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
         // Follow the now-unmuted node's output forward, connect it to the proper nodes
         for linkdata in &flow_links {
             if linkdata.from_node_id == new_node_flowdata.id {
-                let (final_node_id, _, outgoing_name) = get_output_info(linkdata, &flow_links, &flow_nodes);
+                let Some((final_node_id, _, outgoing_name)) = get_output_info(linkdata, &flow_links, &flow_nodes)
+                    else { println!("{fail_str} connect !yara_unmute node to output nodes"); return None; };
 
                 let new: Value = serde_json::from_str(&format!(r#"["{}", {}]"#, linkdata.from_node_id, linkdata.from_node_slot)).ok()?;
                 let i = new_api_nodes.iter().position(|x| x.id == final_node_id)?;
@@ -287,7 +289,9 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
         }
 
         // Un-mute the node in the flow data
-        unmute_node_in_workflow_json(&mut flow_data, new_node_flowdata.id);
+        if None == unmute_node_in_workflow_json(&mut flow_data, new_node_flowdata.id) {
+            println!("{fail_str} unmute node in workflow for !yara_unmute"); return None;
+        }
         yara_unmute_counter += 1;
     }
     
@@ -297,7 +301,9 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
         if let Some(ref title) = node.custom_title {
             if title.contains("!yara_mute") | title.contains("!ym") {
                 new_api_nodes.remove(new_api_nodes.iter().position(|x| x.id == node.id)?);
-                mute_node_in_workflow_json(&mut flow_data, node.id);
+                if None == mute_node_in_workflow_json(&mut flow_data, node.id) {
+                    println!("{fail_str} mute node in workflow for !yara_mute"); return None;
+                }
                 yara_mute_counter += 1;
             }
         }
@@ -384,7 +390,9 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
                     break;
                 }
             }
-            replace_node_loadimage_in_workflow_json(&mut flow_data, node_id_to_replace, &new_filename);
+            if None == replace_node_loadimage_in_workflow_json(&mut flow_data, node_id_to_replace, &new_filename) {
+                println!("{fail_str} get original node data to replace for !yara_load_here"); return None; 
+            }
             yara_load_here_counter += 1;
         }
     }
@@ -439,44 +447,44 @@ pub fn match_header_string_and_read_data<R: Read>(reader: &mut BufReader<R>, hea
 
     Ok(data)
 }
-fn link_input_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> bool {
-    if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.from_node_id).unwrap()).unwrap().kind {
-        true
+fn link_input_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> Option<bool> {
+    if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.from_node_id)?)?.kind {
+        Some(true)
     } else {
-        false
+        Some(false)
     }
 }
-fn get_input_source(flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>, link_id: u64) -> (u64, u64) {
-    let mut linkdata = flow_links.get(flow_links.iter().position(|x| x.link_id == link_id).unwrap()).unwrap();
-    if link_input_is_reroute(&flow_nodes, linkdata) {
+fn get_input_source(flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>, link_id: u64) -> Option<(u64, u64)> {
+    let mut linkdata = flow_links.get(flow_links.iter().position(|x| x.link_id == link_id)?)?;
+    if link_input_is_reroute(&flow_nodes, linkdata)? {
         loop {
-            linkdata = flow_links.get(flow_links.iter().position(|x| x.to_node_id == linkdata.from_node_id).unwrap()).unwrap();
-            if !link_input_is_reroute(&flow_nodes, linkdata) { break; }
+            linkdata = flow_links.get(flow_links.iter().position(|x| x.to_node_id == linkdata.from_node_id)?)?;
+            if !link_input_is_reroute(&flow_nodes, linkdata)? { break; }
         }
     }
-    (linkdata.from_node_id, linkdata.from_node_slot)
+    Some((linkdata.from_node_id, linkdata.from_node_slot))
 }
-fn link_output_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> bool {
-    if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.to_node_id).unwrap()).unwrap().kind {
-        true
+fn link_output_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -> Option<bool> {
+    if "Reroute" == flow_nodes.get(flow_nodes.iter().position(|x| x.id == linkdata.to_node_id)?)?.kind {
+        Some(true)
     } else {
-        false
+        Some(false)
     }
 }
-fn get_output_info(start_linkdata: &LinkData, flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>) -> (u64, u64, String) {
+fn get_output_info(start_linkdata: &LinkData, flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>) -> Option<(u64, u64, String)> {
     let mut linkdata = start_linkdata;
-    if link_output_is_reroute(&flow_nodes, &linkdata) {
+    if link_output_is_reroute(&flow_nodes, &linkdata)? {
         loop {
-            linkdata = flow_links.get(flow_links.iter().position(|x| x.from_node_id == linkdata.to_node_id).unwrap()).unwrap();
-            if !link_output_is_reroute(&flow_nodes, &linkdata) { break; }
+            linkdata = flow_links.get(flow_links.iter().position(|x| x.from_node_id == linkdata.to_node_id)?)?;
+            if !link_output_is_reroute(&flow_nodes, &linkdata)? { break; }
         }
     }
-    (linkdata.to_node_id, linkdata.to_node_slot, get_outgoing_name(&flow_nodes, linkdata.to_node_id, linkdata.link_id))
+    Some((linkdata.to_node_id, linkdata.to_node_slot, get_outgoing_name(&flow_nodes, linkdata.to_node_id, linkdata.link_id)?))
 }
-fn get_outgoing_name(flow_nodes: &Vec<FlowNodeData>, final_node_id: u64, link_id: u64) -> String {
-    let final_node_inputs = flow_nodes.get(flow_nodes.iter().position(|x| x.id == final_node_id).unwrap()).unwrap().inputs.as_ref().unwrap();
-    let input_link_data = final_node_inputs.get(final_node_inputs.iter().position(|x| x.link_id == Some(link_id)).unwrap()).unwrap();
-    input_link_data.name.to_string()
+fn get_outgoing_name(flow_nodes: &Vec<FlowNodeData>, final_node_id: u64, link_id: u64) -> Option<String> {
+    let final_node_inputs = flow_nodes.get(flow_nodes.iter().position(|x| x.id == final_node_id)?)?.inputs.as_ref()?;
+    let input_link_data = final_node_inputs.get(final_node_inputs.iter().position(|x| x.link_id == Some(link_id))?)?;
+    Some(input_link_data.name.to_string())
 }
 
 
@@ -488,61 +496,59 @@ fn get_outgoing_name(flow_nodes: &Vec<FlowNodeData>, final_node_id: u64, link_id
 
 
 
-fn change_node_mode_in_workflow_json(flow_data: &mut Value, node_id: u64, mode: u64) {
-    flow_data.as_object_mut().unwrap()
-        .get_mut("nodes").unwrap()
-        .as_array_mut().unwrap()
-        .iter_mut()
-        .for_each(|x| {
-            let id = x.as_object().unwrap().get("id").unwrap().as_u64().unwrap();
+fn change_node_mode_in_workflow_json(flow_data: &mut Value, node_id: u64, mode: u64) -> Option<()> {
+    for x in flow_data.as_object_mut()?.get_mut("nodes")?.as_array_mut()?.iter_mut() {
+            let id = x.as_object()?.get("id")?.as_u64()?;
             if id == node_id {
-                x.as_object_mut().unwrap().insert("mode".to_string(), Value::Number(serde_json::Number::from(mode)));
+                x.as_object_mut()?.insert("mode".to_string(), Value::Number(serde_json::Number::from(mode)));
             }
-        });
+        }
+    Some(())
 }
-fn unmute_node_in_workflow_json(mut flow_data: &mut Value, unmute_node_id: u64) {
-    change_node_mode_in_workflow_json(&mut flow_data, unmute_node_id, 0);
+fn unmute_node_in_workflow_json(mut flow_data: &mut Value, unmute_node_id: u64) -> Option<()> {
+    change_node_mode_in_workflow_json(&mut flow_data, unmute_node_id, 0)
 }
-fn mute_node_in_workflow_json(mut flow_data: &mut Value, mute_node_id: u64) {
-    change_node_mode_in_workflow_json(&mut flow_data, mute_node_id, 2);
+fn mute_node_in_workflow_json(mut flow_data: &mut Value, mute_node_id: u64) -> Option<()> {
+    change_node_mode_in_workflow_json(&mut flow_data, mute_node_id, 2)
 }
-fn replace_node_loadimage_in_workflow_json(flow_data: &mut Value, replace_node_id: u64, filename: &str) {
-    fn get_original_node_data(flow_data: &Value, replace_node_id: u64) -> (f64, f64, f64, f64, u64, u64) {
-        for node in flow_data.as_object().unwrap().get("nodes").unwrap().as_array().unwrap() {
-            if node.get("id").unwrap().as_u64().unwrap() == replace_node_id {
+fn replace_node_loadimage_in_workflow_json(flow_data: &mut Value, replace_node_id: u64, filename: &str) -> Option<()> {
+    fn get_original_node_data(flow_data: &Value, replace_node_id: u64) -> Option<(f64, f64, f64, f64, u64, u64)> {
+        for node in flow_data.as_object()?.get("nodes")?.as_array()? {
+            if node.get("id")?.as_u64()? == replace_node_id {
 
-                let pos = node.get("pos").unwrap().as_array().unwrap();
-                let pos_x: f64 = pos[0].as_f64().unwrap();
-                let pos_y: f64 = pos[1].as_f64().unwrap();
+                let pos = node.get("pos")?.as_array()?;
+                let pos_x: f64 = pos[0].as_f64()?;
+                let pos_y: f64 = pos[1].as_f64()?;
 
-                let (size_0, size_1) = match node.get("size").unwrap().as_object() {
+                let (size_0, size_1) = match node.get("size")?.as_object() {
                     Some(size) => {
-                        let size_0: f64 = size.get("0").unwrap().as_f64().unwrap();
-                        let size_1: f64 = size.get("1").unwrap().as_f64().unwrap();
+                        let size_0: f64 = size.get("0")?.as_f64()?;
+                        let size_1: f64 = size.get("1")?.as_f64()?;
                         (size_0, size_1)
                     }
                     None => {
-                        let size = node.get("size").unwrap().as_array().unwrap();
-                        let size_0: f64 = size[0].as_f64().unwrap();
-                        let size_1: f64 = size[1].as_f64().unwrap();
+                        let size = node.get("size")?.as_array()?;
+                        let size_0: f64 = size[0].as_f64()?;
+                        let size_1: f64 = size[1].as_f64()?;
                         (size_0, size_1)
                     }
                 };
 
-                let order: u64 = node.get("order").unwrap().as_u64().unwrap();
+                let order: u64 = node.get("order")?.as_u64()?;
 
-                let outputs = node.get("outputs").unwrap().as_array().unwrap();
-                let output_image_link_id: u64 = outputs.get(outputs.iter().position(|x| x.get("type").unwrap().as_str().unwrap() == "IMAGE").unwrap()).unwrap()
-                    .get("links").unwrap().as_array().unwrap()[0].as_u64().unwrap();
-                
-
-                return (pos_x, pos_y, size_0, size_1, order, output_image_link_id);
+                let outputs = node.get("outputs")?.as_array()?;
+                for x in outputs.iter() {
+                    if x.get("type")?.as_str()? == "IMAGE" {
+                        let output_image_link_id: u64 = x.get("links")?.as_array()?[0].as_u64()?;
+                        return Some((pos_x, pos_y, size_0, size_1, order, output_image_link_id));
+                    }
+                }
             }
         }
-        panic!("Failed to get original node data for replacement node (id {replace_node_id})");
+        None
     }
 
-    let (pos_x, pos_y, size_0, size_1, order, output_image_link_id) = get_original_node_data(&flow_data, replace_node_id);
+    let (pos_x, pos_y, size_0, size_1, order, output_image_link_id) = get_original_node_data(&flow_data, replace_node_id)?;
 
     let new_node_str = format!(r#"
     {{
@@ -579,17 +585,18 @@ fn replace_node_loadimage_in_workflow_json(flow_data: &mut Value, replace_node_i
         }}
     "#);
 
-    let new_node: Value = serde_json::from_str(&new_node_str).unwrap();
+    let new_node: Value = serde_json::from_str(&new_node_str).ok()?;
 
-    let nodes = flow_data.as_object_mut().unwrap()
-        .get_mut("nodes").unwrap()
-        .as_array_mut().unwrap();
+    let nodes = flow_data.as_object_mut()?
+        .get_mut("nodes")?
+        .as_array_mut()?;
     for node in nodes {
-        let id = node.as_object().unwrap().get("id").unwrap().as_u64().unwrap();
+        let id = node.as_object()?.get("id")?.as_u64()?;
         if id == replace_node_id {
-            // x.as_object_mut().unwrap().insert("mode".to_string(), Value::Number(serde_json::Number::from(mode)));
+            // x.as_object_mut()?.insert("mode".to_string(), Value::Number(serde_json::Number::from(mode)));
             *node = new_node;
-            return;
+            return Some(());
         }
     }
+    Some(())
 }
