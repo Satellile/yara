@@ -258,9 +258,7 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
         // Follow the now-unmuted node's output forward, connect it to the proper nodes
         for linkdata in &flow_links {
             if linkdata.from_node_id == new_node_flowdata.id {
-
-                let (final_node_id, _) = get_output_info(linkdata, &flow_links, &flow_nodes);
-                let outgoing_name = get_outgoing_name(&flow_nodes, final_node_id, linkdata.link_id);
+                let (final_node_id, _, outgoing_name) = get_output_info(linkdata, &flow_links, &flow_nodes);
 
                 let new: Value = serde_json::from_str(&format!(r#"["{}", {}]"#, linkdata.from_node_id, linkdata.from_node_slot)).unwrap();
                 let i = new_api_nodes.iter().position(|x| x.id == final_node_id).unwrap();
@@ -447,7 +445,7 @@ fn link_output_is_reroute(flow_nodes: &Vec<FlowNodeData>, linkdata: &LinkData) -
         false
     }
 }
-fn get_output_info(start_linkdata: &LinkData, flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>) -> (u64, u64) {
+fn get_output_info(start_linkdata: &LinkData, flow_links: &Vec<LinkData>, flow_nodes: &Vec<FlowNodeData>) -> (u64, u64, String) {
     let mut linkdata = start_linkdata;
     if link_output_is_reroute(&flow_nodes, &linkdata) {
         loop {
@@ -455,7 +453,7 @@ fn get_output_info(start_linkdata: &LinkData, flow_links: &Vec<LinkData>, flow_n
             if !link_output_is_reroute(&flow_nodes, &linkdata) { break; }
         }
     }
-    (linkdata.to_node_id, linkdata.to_node_slot)
+    (linkdata.to_node_id, linkdata.to_node_slot, get_outgoing_name(&flow_nodes, linkdata.to_node_id, linkdata.link_id))
 }
 fn get_outgoing_name(flow_nodes: &Vec<FlowNodeData>, final_node_id: u64, link_id: u64) -> String {
     let final_node_inputs = flow_nodes.get(flow_nodes.iter().position(|x| x.id == final_node_id).unwrap()).unwrap().inputs.as_ref().unwrap();
