@@ -78,7 +78,7 @@ pub fn generate_yara_prompts(
         save_hash_and_workflow(yara_prompt, &workflow_file, &mut storage);
     }
 
-    println!("sending prompts to ComfyUI for generation...");
+    println!("Sending prompts to ComfyUI for generation...");
     for yara_prompt in &yara_prompts {
         let id = yara_prompt.generate();
         prompt_ids.insert(id, PIDStatus::Queued);

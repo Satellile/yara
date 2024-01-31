@@ -201,7 +201,11 @@ fn main() {
                         } else { println!("Error - 'yara regen' doesn't currently support specifying folders to regenerate."); }
                     } 
                 } else {
-                    for entry in fs::read_dir(cfg.get_regen_dir()).unwrap() {
+                    let Ok(entries) = fs::read_dir(cfg.get_regen_dir())
+                        else { println!("Error - failed to read files from 'regen' directory.
+                            \rThe regen directory is {}.
+                            \rThis can be changed in the config (run 'yara config' and edit 'config.json').", cfg.get_regen_dir().display()); return; };
+                    for entry in entries {
                         let path = entry.unwrap().path();
                         if path_is_png_file(path.as_path()) {
                             match regen_modified_workflows(&path, cfg.get_input_dir()) {
@@ -214,7 +218,11 @@ fn main() {
                 if failures.len() > 0 {
                     println!("\x1b[31m{} images failed regen preparations:\x1b[0m {failures:#?}", failures.len());
                 }
-                generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
+                if yara_prompts.is_empty() {
+                    println!("No images were detected with Yara regen keywords (!yara_unmute, !yara_mute, or !yara_load_here).");
+                } else {
+                    generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
+                }
             }
             "f" | "fix" => {
                 let args: Vec<String> = args.collect();
