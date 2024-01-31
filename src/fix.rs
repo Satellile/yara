@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{WorkflowStorage, count_queue, get_queue};
+use crate::{WorkflowStorage, count_queue, get_queue, path_is_png_file};
 use crate::data::{YaraPrompt, hash_nodemap};
 use crate::{STATUS, format_seconds};
 
@@ -26,18 +26,14 @@ pub fn fix_workflows_in_folders(mut storage: &mut WorkflowStorage, workflow_file
     for dir in dirs {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
-            if !path.is_dir() {
-                if let Some(extension) = path.extension() {
-                    if extension == "png" {
-                        if let Ok(hash) = get_api_hash_from_image_file(path.as_path()) {
-                            if let Some(workflow) = storage.workflows.get(&hash) {
-                                inject_workflow_into_image(&path, &workflow);
-                                remove_workflow_from_storage(&hash, workflow_file, &mut storage);
-                                println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
-                            }
-                        } else { println!("Failed to get api info and hash from file: {:?}", path.file_name().unwrap()); }
+            if path_is_png_file(path.as_path()) {
+                if let Ok(hash) = get_api_hash_from_image_file(path.as_path()) {
+                    if let Some(workflow) = storage.workflows.get(&hash) {
+                        inject_workflow_into_image(&path, &workflow);
+                        remove_workflow_from_storage(&hash, workflow_file, &mut storage);
+                        println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
                     }
-                }
+                } else { println!("Failed to get api info and hash from file: {:?}", path.file_name().unwrap()); }
             }
         }
     }
@@ -45,16 +41,12 @@ pub fn fix_workflows_in_folders(mut storage: &mut WorkflowStorage, workflow_file
 
 
 pub fn fix_workflow_in_file(mut storage: &mut WorkflowStorage, workflow_file: &str, path: PathBuf) {
-    if !path.is_dir() {
-        if let Some(extension) = path.extension() {
-            if extension == "png" {
-                let hash = get_api_hash_from_image_file(path.as_path()).unwrap();
-                if let Some(workflow) = storage.workflows.get(&hash) {
-                    inject_workflow_into_image(&path, &workflow);
-                    remove_workflow_from_storage(&hash, workflow_file, &mut storage);
-                    println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
-                }
-            }
+    if path_is_png_file(path.as_path()) {
+        let hash = get_api_hash_from_image_file(path.as_path()).unwrap();
+        if let Some(workflow) = storage.workflows.get(&hash) {
+            inject_workflow_into_image(&path, &workflow);
+            remove_workflow_from_storage(&hash, workflow_file, &mut storage);
+            println!("       Workflow has been embedded into image {:?}", path.file_name().unwrap());
         }
     }
 }
@@ -124,7 +116,8 @@ pub fn generate_yara_prompts(
                             if info.get("type").unwrap() == "output" {
                                 let filename = info.get("filename").unwrap().as_str().unwrap();
                                 let subfolder = info.get("subfolder").unwrap().as_str().unwrap();
-                                println!("{STATUS}generated image needs a workflow");
+                                print!("\n{STATUS}generated image needs a workflow... ");
+                                std::io::stdout().flush().unwrap();
                                 let mut path = comfyui_output_directory.clone();
                                 if subfolder != "" {
                                     path.push(subfolder);
@@ -136,7 +129,7 @@ pub fn generate_yara_prompts(
                                 if let Some(workflow) = storage.workflows.get(&hash) {
                                     inject_workflow_into_image(&path, &workflow);
                                     remove_workflow_from_storage(&hash, workflow_file, &mut storage);
-                                    println!("{STATUS}embedded workflow into {subfolder}/{filename}");
+                                    println!(" embedded workflow into {subfolder}/{filename}");
                                     workflows_embedded += 1;
                                 } else {
                                     println!("//\x1b[31m WARNING\x1b[0m // Hash doesn't match (unexpected) // hash {hash}, file {filename}");

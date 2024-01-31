@@ -80,105 +80,121 @@ struct Node {
 }
 
 
-pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: PathBuf) -> YaraPrompt {
-    let filename = filepath.file_stem().unwrap().to_string_lossy();
+
+pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory: PathBuf) -> Option<YaraPrompt> {
+    let filename = filepath.file_stem()?.to_string_lossy();
+    let fail_str = "\x1b[31mfailure\x1b[0m:// \x1b[31m".to_string() + &filename + &".png\x1b[0m // failed to";
     let mut yara_unmute_counter = 0;
     let mut yara_mute_counter = 0;
     let mut yara_load_here_counter = 0;
 
     // Read embedded data from .png file
-    let file = fs::File::open(filepath.as_path()).unwrap();
+    let Ok(file) = fs::File::open(filepath.as_path())
+        else { println!("{fail_str} open file"); return None; };
+
     let mut reader = BufReader::new(file);
 
     let api_data_marker: [u8; 10] = [116, 69, 88, 116, 112, 114, 111, 109, 112, 116]; // "tEXtprompt"
-    let bytes = match_header_string_and_read_data(&mut reader, api_data_marker).unwrap();
-    let api_data: Value = serde_json::from_slice(&bytes).unwrap();
-    // println!("     API Data:\n{}\n", api_data);
+    let Ok(bytes) = match_header_string_and_read_data(&mut reader, api_data_marker)
+        else { println!("{fail_str} read embedded API JSON data"); return None; };
+    let Ok(api_data): Result<serde_json::Map<String, Value>, serde_json::Error> = serde_json::from_slice(&bytes)
+        else { println!("{fail_str} deserialize embedded API JSON data"); return None; };
 
     let flow_data_marker: [u8; 10] = [116, 69, 88, 116, 119, 111, 114, 107, 102, 108]; // "tEXtworkfl"
-    let bytes = match_header_string_and_read_data(&mut reader, flow_data_marker).unwrap();
-    let mut flow_data: Value = serde_json::from_slice(&bytes).unwrap();
-    // println!("    Flow Data:\n{}\n", flow_data);
+    let Ok(bytes) = match_header_string_and_read_data(&mut reader, flow_data_marker)
+        else { println!("{fail_str} read embedded workflow data"); return None; };
+    let Ok(mut flow_data): Result<Value, serde_json::Error> = serde_json::from_slice(&bytes) 
+        else { println!("{fail_str} deserialize embedded workflow data"); return None; };
 
     // Get node info from workflow metadata
-    let mut flow_nodes: Vec<FlowNodeData> = Vec::new();
-    for node in flow_data.as_object().unwrap().get("nodes").unwrap().as_array().unwrap().iter() .map(|x| {
-            let obj = x.as_object().unwrap();
-            FlowNodeData {
-                id: obj.get("id").unwrap().as_u64().unwrap(),
-                muted: match obj.get("mode").unwrap().as_u64().unwrap() {
+    fn get_flownodes_from_metadata(flow_data: &Value) -> Option<Vec<FlowNodeData>> {
+        let mut flow_nodes: Vec<FlowNodeData> = Vec::new();
+        for json_node in flow_data.as_object()?.get("nodes")?.as_array()?.iter() {
+            let obj = json_node.as_object()?;
+            let flow_node =  FlowNodeData {
+                id: obj.get("id")?.as_u64()?,
+                muted: match obj.get("mode")?.as_u64()? {
                     2 => true,
                     _ => false,
                 },
                 custom_title: match obj.get("title") {
-                    Some(n) => Some(n.as_str().unwrap().to_string()),
+                    Some(n) => Some(n.as_str()?.to_string()),
                     None => None,
                 },
                 widgets: match obj.get("widgets_values") {
-                    Some(n) => Some(n.as_array().unwrap().to_vec()),
+                    Some(n) => Some(n.as_array()?.to_vec()),
                     None => None,
                 },
                 inputs: match obj.get("inputs") {
-                    Some(n) => 
-                        Some(n.as_array().unwrap().iter()//.to_vec()
-                            .map(|x| {
-                                let obj = x.as_object().unwrap();
-                                ApiInput {
-                                    link_id: match obj.get("link").unwrap().as_u64() {
-                                        Some(link_id) => Some(link_id),
-                                        None => None,
-                                    },
-                                    name: obj.get("name").unwrap().as_str().unwrap().to_string(),
-                                    // kind: obj.get("type").unwrap().as_str().unwrap().to_string(),
-                                }
-                            }).collect()
-                        ),
+                    Some(n) => {
+                        let mut inputs: Vec<ApiInput> = Vec::new();
+                        for x in n.as_array()?.iter() {
+                            let obj = x.as_object()?;
+                            inputs.push(ApiInput {
+                                link_id: obj.get("link")?.as_u64(),
+                                name: obj.get("name")?.as_str()?.to_string(),
+                                // kind: obj.get("type")?.as_str()?.to_string(),
+                            });
+                        }
+                        Some(inputs)
+                    }
+
                     
                     None => None,
                 },
-                kind: obj.get("type").unwrap().as_str().unwrap().to_string(),
+                kind: obj.get("type")?.as_str()?.to_string(),
                 output_types: match obj.get("outputs") {
                     Some(output_list) => {
                         let mut output_types = Vec::new();
-                        for output in output_list.as_array().unwrap() {
-                            output_types.push(output.get("type").unwrap().as_str().unwrap().to_string());
+                        for output in output_list.as_array()? {
+                            output_types.push(output.get("type")?.as_str()?.to_string());
                         }
                         Some(output_types)
                     },
                     None => None,
                 },
-            }
-        }) {
-        // println!("Flow Node ID: {}", node.id);
-        flow_nodes.push(node);
+            };
+            flow_nodes.push(flow_node);
+        }
+        Some(flow_nodes)
     }
+    let Some(flow_nodes) = get_flownodes_from_metadata(&flow_data)
+        else { println!("{fail_str} process node data from workflow metadata"); return None; };
 
     // Get node links from workflow metadata
-    let mut flow_links: Vec<LinkData> = Vec::new();
-    for link in flow_data.as_object().unwrap().get("links").unwrap().as_array().unwrap() {
-        let link = link.as_array().unwrap();
-        let linkdata = LinkData {
-            link_id: link[0].as_u64().unwrap(),
-            from_node_id: link[1].as_u64().unwrap(),
-            from_node_slot: link[2].as_u64().unwrap(),
-            to_node_id: link[3].as_u64().unwrap(),
-            to_node_slot: link[4].as_u64().unwrap(),
-            // name: link[5].as_str().unwrap().to_string(),
-        };
-        // println!("Link: [{}, {}, {}, {}, {}, {}]", linkdata.link_id, linkdata.from_node_id, linkdata.from_node_slot, linkdata.to_node_id, linkdata.to_node_slot, linkdata.name);
-        flow_links.push(linkdata);
+    fn get_flow_links_from_metadata(flow_data: &Value) -> Option<Vec<LinkData>> {
+        let mut flow_links: Vec<LinkData> = Vec::new();
+        for link in flow_data.as_object()?.get("links")?.as_array()? {
+            let link = link.as_array()?;
+            let linkdata = LinkData {
+                link_id: link[0].as_u64()?,
+                from_node_id: link[1].as_u64()?,
+                from_node_slot: link[2].as_u64()?,
+                to_node_id: link[3].as_u64()?,
+                to_node_slot: link[4].as_u64()?,
+                // name: link[5].as_str()?.to_string(),
+            };
+            flow_links.push(linkdata);
+        }
+        Some(flow_links)
     }
+    let Some(flow_links) = get_flow_links_from_metadata(&flow_data)
+        else { println!("{fail_str} process link data from workflow metadata"); return None; };
 
 
     // Begin assembling a new prompt, copying the API prompt data
-    let mut new_api_nodes: Vec<Node> = Vec::new();
-    let old_api_nodes = api_data.as_object().unwrap();
-    for id in old_api_nodes.keys() {
-        new_api_nodes.push(Node {
-            id: id.parse::<u64>().unwrap(),
-            contents: old_api_nodes.get(id).unwrap().as_object().unwrap().clone(),
-        });
+    fn get_api_nodes(api_data: &serde_json::Map<String, Value>) -> Option<Vec<Node>> {
+        let mut new_api_nodes: Vec<Node> = Vec::new();
+        for id in api_data.keys() {
+            new_api_nodes.push(Node {
+                id: id.parse::<u64>().ok()?,
+                contents: api_data.get(id)?.as_object()?.clone(),
+            });
+        }
+        Some(new_api_nodes)
     }
+    let Some(mut new_api_nodes) = get_api_nodes(&api_data)
+        else { println!("{fail_str} process node data from API JSON metadata"); return None; };
 
 
     // Find the node(s) to unmute
@@ -191,9 +207,9 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
                     yara_unmute_nodes.push(FlowNodeData {
                         id: node.id,
                         muted: node.muted,
-                        custom_title: Some(node.custom_title.as_ref().unwrap().clone()),
-                        widgets: Some(node.widgets.as_ref().unwrap().clone()),
-                        inputs: Some(node.inputs.as_ref().unwrap().clone()),
+                        custom_title: Some(node.custom_title.as_ref()?.clone()),
+                        widgets: Some(node.widgets.as_ref()?.clone()),
+                        inputs: Some(node.inputs.as_ref()?.clone()),
                         output_types: node.output_types.clone(),
                         kind: node.kind.clone(),
                     });
@@ -209,11 +225,12 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
         let mut inputs = serde_json::Map::new();
 
         // Create input fields
-        for input_widget in new_node_flowdata.inputs.unwrap() {
-            let (input_node_id, input_node_slot) = get_input_source(&flow_links, &flow_nodes, input_widget.link_id.unwrap());
-            inputs.insert(input_widget.name.to_string(), 
-                serde_json::from_str(&format!(r#"["{input_node_id}", {input_node_slot}]"#)).unwrap()
-                );
+        for input_widget in new_node_flowdata.inputs? {
+            let (input_node_id, input_node_slot) = get_input_source(&flow_links, &flow_nodes, input_widget.link_id?);
+            inputs.insert(
+                input_widget.name.to_string(), 
+                serde_json::from_str(&format!(r#"["{input_node_id}", {input_node_slot}]"#)).ok()?
+            );
         }
 
         // Create non-input fields
@@ -221,25 +238,25 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
             "KSampler" => EXPECTED_WIDGETS_KSAMPLER.iter(),
             "KSamplerAdvanced" => EXPECTED_WIDGETS_KSAMPLER_ADVANCED.iter(),
             // "SamplerCustom" => ,
-            _ => { panic!("Error - !ym can only be used on certain nodes: KSampler, KSamplerAdvanced, and SamplerCustom."); /*.unwrap()*/ }
+            _ => { println!("{fail_str} process widgets (!ym can only be used on KSampler, KSamplerAdvanced, and SamplerCustom nodes.)"); return None; }
         };
 
-        let mut widgets = new_node_flowdata.widgets.as_ref().unwrap().iter();
+        let mut widgets = new_node_flowdata.widgets.as_ref()?.iter();
         for (name, need) in expected_widgets {
             let name = name.to_string();
-            let w = widgets.next().unwrap();
+            let w = widgets.next()?;
             match need {
                 WidgetField::String => {
-                    let data = w.as_str().unwrap();
+                    let data = w.as_str()?;
                     inputs.insert(name, Value::String(data.into()));
                 }
                 WidgetField::U64 => {
-                    let data = w.as_u64().unwrap();
+                    let data = w.as_u64()?;
                     inputs.insert(name, Value::Number(data.into()));
                 }
                 WidgetField::F64 => {
-                    let data = w.as_f64().unwrap();
-                    inputs.insert(name, Value::Number(serde_json::Number::from_f64(data).unwrap()));
+                    let data = w.as_f64()?;
+                    inputs.insert(name, Value::Number(serde_json::Number::from_f64(data)?));
                 }
                 WidgetField::Skip => (),
             }
@@ -260,11 +277,11 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
             if linkdata.from_node_id == new_node_flowdata.id {
                 let (final_node_id, _, outgoing_name) = get_output_info(linkdata, &flow_links, &flow_nodes);
 
-                let new: Value = serde_json::from_str(&format!(r#"["{}", {}]"#, linkdata.from_node_id, linkdata.from_node_slot)).unwrap();
-                let i = new_api_nodes.iter().position(|x| x.id == final_node_id).unwrap();
-                new_api_nodes.get_mut(i).unwrap()
+                let new: Value = serde_json::from_str(&format!(r#"["{}", {}]"#, linkdata.from_node_id, linkdata.from_node_slot)).ok()?;
+                let i = new_api_nodes.iter().position(|x| x.id == final_node_id)?;
+                new_api_nodes.get_mut(i)?
                     .contents
-                    .get_mut("inputs").unwrap().as_object_mut().unwrap()
+                    .get_mut("inputs")?.as_object_mut()?
                     .insert(outgoing_name, new);
             }
         }
@@ -279,8 +296,7 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
     for node in &flow_nodes {
         if let Some(ref title) = node.custom_title {
             if title.contains("!yara_mute") | title.contains("!ym") {
-                new_api_nodes.remove(new_api_nodes.iter().position(|x| x.id == node.id).unwrap());
-                // println!("Removed node {}: {title}", node.id);
+                new_api_nodes.remove(new_api_nodes.iter().position(|x| x.id == node.id)?);
                 mute_node_in_workflow_json(&mut flow_data, node.id);
                 yara_mute_counter += 1;
             }
@@ -311,8 +327,8 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
     if !node_ids_to_replace.is_empty() {
 
         // Find out if an edited version of the image exists
-        let extension = filepath.extension().unwrap().to_str().unwrap();
-        let original_filename = filepath.file_stem().unwrap().to_str().unwrap();
+        let extension = filepath.extension()?.to_str()?;
+        let original_filename = filepath.file_stem()?.to_str()?;
         let file_name_edited = original_filename.to_owned() + &"edit." + &extension;
 
         let mut supposed_filepath = filepath.clone();
@@ -326,15 +342,22 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
         };
 
         // Get image hash, get new filename, copy image to ComfyUI/inputs
-        let mut file = fs::File::open(image_path).unwrap();
+        let Ok(mut file) = fs::File::open(image_path)
+            else { println!("{fail_str} open image file"); return None; };
         let mut buf: Vec<u8> = Vec::new();
-        file.read_to_end(&mut buf).unwrap();
+        if let Err(e) = file.read_to_end(&mut buf) {
+            println!("{fail_str} read image file: {e}");
+            return None;
+        }
         let mut image_hash = blake3::hash(&buf).to_hex();
         image_hash.truncate(20); // Shorter => easier on the eyes, esp. in ComfyUI's jank text fields. A collision is far from catastrophic, anyway. 
 
         let new_filename = "_".to_owned() + &filename + &image_hash.as_str() + &"." + &extension;
         comfyui_input_directory.push(new_filename.clone());
-        fs::copy(image_path, comfyui_input_directory).unwrap();
+        if let Err(e) = fs::copy(image_path, comfyui_input_directory) {
+            println!("{fail_str} copy image file to Comfyui/input: {e}");
+            return None;
+        }
 
 
         for node_id_to_replace in node_ids_to_replace {
@@ -350,7 +373,7 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
                         "upload": "image"
                     }}
                 }}
-                "#)).unwrap(),
+                "#)).ok()?,
             };
 
             // Replace the original !ylh node.
@@ -367,21 +390,17 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
     }
 
 
-
-
-
-    // Add option to randomize seed?
-
-
-
+    // Add marker to randomize seed?
 
 
     let mut json_prompt = serde_json::Map::new();
     for node in new_api_nodes {
         json_prompt.insert(node.id.to_string(), Value::Object(node.contents));
     }
-    println!("{filename} - {yara_unmute_counter} nodes unmuted, {yara_mute_counter} nodes muted, {yara_load_here_counter} nodes replaced with LoadImage node.");
-    YaraPrompt::new(json_prompt, flow_data)
+    let succ_str = "\x1b[32mprepped\x1b[0m:// \x1b[32m".to_string() + &filename + &".png\x1b[0m // ";
+    println!("{succ_str}{yara_unmute_counter} nodes unmuted, {yara_mute_counter} nodes muted, {yara_load_here_counter} nodes replaced with LoadImage node.");
+
+    Some(YaraPrompt::new(json_prompt, flow_data))
 }
 
 

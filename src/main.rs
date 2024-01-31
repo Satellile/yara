@@ -1,5 +1,5 @@
 use std::io::{Read, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::fs;
 use std::collections::HashMap;
 use std::process::Command;
@@ -15,7 +15,7 @@ mod regen;
 mod fix;
 mod data;
 
-use regen::unmute_and_regenerate;
+use regen::regen_modified_workflows;
 use fix::{generate_yara_prompts, fix_workflows_in_folders, fix_workflow_in_file};
 use data::YaraPrompt;
 
@@ -189,25 +189,30 @@ fn main() {
             "rg" | "regen" => {
                 let args: Vec<String> = args.collect();
                 let mut yara_prompts: Vec<YaraPrompt> = Vec::new();
+                let mut failures: Vec<PathBuf> = Vec::new();
                 if !args.is_empty() {
                     for path in args {
                         let path = PathBuf::from(path);
-                        if !path.is_dir() {
-                            let yara_prompt = unmute_and_regenerate(PathBuf::from(path), cfg.get_input_dir());
-                            yara_prompts.push(yara_prompt);
+                        if path_is_png_file(path.as_path()) {
+                            match regen_modified_workflows(&PathBuf::from(&path), cfg.get_input_dir()) {
+                                Some(yara_prompt) => yara_prompts.push(yara_prompt),
+                                None => failures.push(path),
+                            }
                         } else { println!("Error - 'yara regen' doesn't currently support specifying folders to regenerate."); }
                     } 
                 } else {
                     for entry in fs::read_dir(cfg.get_regen_dir()).unwrap() {
                         let path = entry.unwrap().path();
-                        if !path.is_dir() { continue; }
-                        if let Some(extension) = path.extension() {
-                            if extension == "png" {
-                                let yara_prompt = unmute_and_regenerate(path, cfg.get_input_dir());
-                                yara_prompts.push(yara_prompt);
+                        if path_is_png_file(path.as_path()) {
+                            match regen_modified_workflows(&path, cfg.get_input_dir()) {
+                                Some(yara_prompt) => yara_prompts.push(yara_prompt),
+                                None => failures.push(path),
                             }
                         }
                     }
+                }
+                if failures.len() > 0 {
+                    println!("\x1b[31m{} images failed regen preparations:\x1b[0m {failures:#?}", failures.len());
                 }
                 generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
             }
@@ -687,6 +692,14 @@ fn get_queue() -> Value {
     json_data
 }
 
+
+fn path_is_png_file(path: &Path) -> bool {
+    if path.is_dir() { return false; }
+    if let Some(ext) = path.extension() {
+        if ext == "png" { true }
+        else { false }
+    } else { false }
+}
 
 
 
