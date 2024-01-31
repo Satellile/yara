@@ -227,23 +227,21 @@ pub fn unmute_and_regenerate(filepath: PathBuf, mut comfyui_input_directory: Pat
         let mut widgets = new_node_flowdata.widgets.as_ref().unwrap().iter();
         for (name, need) in expected_widgets {
             let name = name.to_string();
-            if !inputs.contains_key(&name) { // widget hasn't been converted to input in ComfyUI
-                let w = widgets.next().unwrap();
-                match need {
-                    WidgetField::String => {
-                        let data = w.as_str().unwrap();
-                        inputs.insert(name, Value::String(data.into()));
-                    }
-                    WidgetField::U64 => {
-                        let data = w.as_u64().unwrap();
-                        inputs.insert(name, Value::Number(data.into()));
-                    }
-                    WidgetField::F64 => {
-                        let data = w.as_f64().unwrap();
-                        inputs.insert(name, Value::Number(serde_json::Number::from_f64(data).unwrap()));
-                    }
-                    WidgetField::Skip => (),
+            let w = widgets.next().unwrap();
+            match need {
+                WidgetField::String => {
+                    let data = w.as_str().unwrap();
+                    inputs.insert(name, Value::String(data.into()));
                 }
+                WidgetField::U64 => {
+                    let data = w.as_u64().unwrap();
+                    inputs.insert(name, Value::Number(data.into()));
+                }
+                WidgetField::F64 => {
+                    let data = w.as_f64().unwrap();
+                    inputs.insert(name, Value::Number(serde_json::Number::from_f64(data).unwrap()));
+                }
+                WidgetField::Skip => (),
             }
         }
 
