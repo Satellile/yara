@@ -405,9 +405,14 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     for node in new_api_nodes {
         json_prompt.insert(node.id.to_string(), Value::Object(node.contents));
     }
+
+    if yara_unmute_counter + yara_mute_counter + yara_load_here_counter == 0 {
+        println!("\x1b[33mwarning\x1b[0m:// \x1b[33m{filename}.png\x1b[0m // no nodes in this image's workflow had keywords (!yara_unmute, !yara_mute, !yara_load_here) in their titles. Skipping.");
+        return None;
+    }
+
     let succ_str = "\x1b[32mprepped\x1b[0m:// \x1b[32m".to_string() + &filename + &".png\x1b[0m // ";
     println!("{succ_str}{yara_unmute_counter} nodes unmuted, {yara_mute_counter} nodes muted, {yara_load_here_counter} nodes replaced with LoadImage node.");
-
     Some(YaraPrompt::new(json_prompt, flow_data))
 }
 
