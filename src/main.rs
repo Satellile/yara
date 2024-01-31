@@ -247,15 +247,33 @@ fn main() {
 
 
 
+
+
+
+
 fn save_queue(arg: String, cmd: SaveQueue) {
     let queue_data = get_queue();
 
     let mut prompts: Vec<YaraPrompt> = Vec::new();
+    let mut successes = 0;
+    let mut failures = 0;
 
     if cmd == SaveQueue::All {
         if let Some(x) = queue_data["queue_running"].as_array() {
             for p in x {
-                prompts.push(YaraPrompt::new(p[2].as_object().unwrap().clone(), p[3].as_object().unwrap().get("extra_pnginfo").unwrap().as_object().unwrap().get("workflow").unwrap().clone()));
+                let prompt = p[2].as_object().unwrap().clone();
+                let pnginfo = p[3].as_object().unwrap().get("extra_pnginfo");
+                match pnginfo {
+                    Some(wf) => {
+                        let workflow = wf.as_object().unwrap().get("workflow").unwrap().clone();
+                        prompts.push(YaraPrompt::new(prompt, workflow));
+                        successes += 1;
+                    }
+                    None => {
+                        println!("\x1b[31merror\x1b[0m:// failed to save prompt number {} (could not get workflow metadata).", p[0]);
+                        failures += 1;
+                    }
+                }
             }
         }
     }
@@ -263,19 +281,37 @@ fn save_queue(arg: String, cmd: SaveQueue) {
     let mut ordered_prompts: Vec<(i64, YaraPrompt)> = Vec::new();
     if let Some(x) = queue_data["queue_pending"].as_array() {
         for p in x {
-            ordered_prompts.push((
-                p[0].as_i64().unwrap(), 
-                YaraPrompt::new(p[2].as_object().unwrap().clone(), p[3].as_object().unwrap().get("extra_pnginfo").unwrap().as_object().unwrap().get("workflow").unwrap().clone())
-            ));
+            let prompt = p[2].as_object().unwrap().clone();
+            let pnginfo = p[3].as_object().unwrap().get("extra_pnginfo");
+            match pnginfo {
+                Some(wf) => {
+                    let workflow = wf.as_object().unwrap().get("workflow").unwrap().clone();
+                    ordered_prompts.push((
+                        p[0].as_i64().unwrap(), 
+                        YaraPrompt::new(prompt, workflow)
+                        ));
+                    successes += 1;
+                }
+                None => {
+                    println!("\x1b[31merror\x1b[0m:// failed to save prompt number {} (could not get workflow metadata).", p[0]);
+                    failures += 1;
+                }
+            }
         }
     }
     ordered_prompts.sort_by(|a, b| a.0.cmp(&b.0));
     let (_, x): (Vec<i64>, Vec<YaraPrompt>) = ordered_prompts.iter().cloned().unzip();
     prompts.extend(x);
 
-    let path = get_saved_queue_path(arg);
-    serde_json::to_writer(&fs::File::create(path.clone()).unwrap(), &prompts).unwrap();
-    println!("Saved to {}", path.display());
+    println!("{successes} prompts saved. {failures} prompts attempted to save but failed due to no workflow metadata");
+
+    if successes > 0 {
+        let path = get_saved_queue_path(arg);
+        serde_json::to_writer(&fs::File::create(path.clone()).unwrap(), &prompts).unwrap();
+        println!("Saved to {}", path.display());
+    } else {
+        println!("Did not save any prompts");
+    }
 }
 
 
