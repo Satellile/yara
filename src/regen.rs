@@ -202,6 +202,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     for node in &flow_nodes {
         if node.muted {
             if let Some(ref title) = node.custom_title {
+                let title = title.to_lowercase();
                 if title.contains("!yara_unmute") | title.contains("!yum") {
                     // println!("Unmute Node ID: {} - {title}", node.id);
                     yara_unmute_nodes.push(FlowNodeData {
@@ -299,6 +300,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     // Mute (remove) any nodes marked with !ym
     for node in &flow_nodes {
         if let Some(ref title) = node.custom_title {
+            let title = title.to_lowercase();
             if title.contains("!yara_mute") | title.contains("!ym") {
                 new_api_nodes.remove(new_api_nodes.iter().position(|x| x.id == node.id)?);
                 if None == mute_node_in_workflow_json(&mut flow_data, node.id) {
@@ -314,6 +316,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     let mut node_ids_to_replace: Vec<u64> = Vec::new();
     for node in &flow_nodes {
         if let Some(ref title) = node.custom_title {
+            let title = title.to_lowercase();
             if title.contains("!yara_load_here") | title.contains("!ylh") {
                 if let Some(output_types) = &node.output_types {
                     if !output_types.is_empty() & output_types.contains(&"IMAGE".to_string()) {
