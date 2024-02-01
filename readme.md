@@ -131,6 +131,7 @@ This feature is mainly intended for 2-pass workflows (where you generate a low-r
 
 To work, this feature requires ComfyUI workflow metadata embedded into the original image. Thus, it may not function with images generated through 3rd-party tools.
 
+A small additional feature - "!yara_load_here" normally loads in the original image. However, if there is another image file in the same directory, with the same filename except with "edit" appended to the end (e.g. `ComfyUI_00022_.png` => `ComfyUI_00022_edit.png`), it will load that image instead, while using the original image's modified workflow data. This is useful if you're modifying the low-res image (such as to remove artifacts or improve composition) before you send it through the second sampler.
 
 
 
