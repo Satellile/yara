@@ -103,35 +103,34 @@ Deleting many prompts in ComfyUI is cumbersome. When you accidentally queue prom
 
 ## Regenerating Images With Modifications
 
-This feature allows you to quickly regenerate many images quickly with certain changes to the workflow.
+This feature allows you to quickly regenerate many images with certain changes to the workflow.
 
-
-
-Node titles are used to denote which nodes you want to change. In ComfyUI, set a custom title (right click a node => "Title") on the node you want to change, and edit it to include one of Yara's commands.
+Node titles are used to specify which nodes to change and what changes to make. In ComfyUI, set a custom title (right click a node -> "Title") on the node you want to change, and edit it to include one of Yara's commands.
 
 Available commands are:
 
 | Command                   | Alias |  Function      | Limitations                                                    |
 |---------------------------|-------------------------------------------|-----------------------------|--------------------------------------------|
-| !yara_mute | !yum | Unmute this node. | Only available for KSampler, KSamplerAdvanced, and SamplerCustom nodes.
-| !yara_unmute | !ym | Mute this node. | 
-| !yara_load_here | !ylh | Replace this node with a LoadImage node, loading the original generated image here | Only available on nodes outputting "IMAGE"
+| !yara_unmute | !yum | Unmute this node. | Only available for KSampler, KSamplerAdvanced, and SamplerCustom nodes.
+| !yara_mute | !ym | Mute this node. | 
+| !yara_load_here | !ylh | Replace this node with a LoadImage node, loading the original generated image | Only available on nodes outputting "IMAGE"
 
 Generate the image in ComfyUI. When you want to regenerate it with the nodes modified, run
 
     yara regen [filepath]
 
-to regenerate the image. You can include as many files as you want, separated by spaces; I'd recommend selecting them in a file browser and dragging/dropping into the terminal window.
+to regenerate the image. You can include multiple files separated by spaces; I'd recommend selecting images in a file browser and dragging/dropping into the terminal window.
 
 Alternatively, you can move the images you wish to regenerate into a folder, and simply run 
 
     yara regen
 
-without any arguments, to regenerate every image in that folder. This folder can be customized in the config file (`yara config`); by default it looks for images in `ComfyUI/output/regen`.
+without any arguments, to regenerate every image in that folder. This folder that Yara looks for images in can be customized in the config file (`yara config`). By default, it looks in `ComfyUI/output/regen`.
 
-This feature is most useful when you have a 2-pass workflow (where you generate a low-res image, upscale it, and do another KSampler pass with low denoising). You can mute the second sampler and set `!yara_unmute`, generate many low-res images, and select the one(s) you want to do the second pass on. Then, instead of manually loading the image workflow and unmuting the node, simply pass the image to `yara regen`. You can also set `!yara_load_here` on the VAEEncode leading to the second sampler, and `!yara_mute` on the SaveImage output from the first sampler, to avoid regenerating the low-res image, saving time if you're on CPU or an old GPU.
+This feature is mainly intended for 2-pass workflows (where you generate a low-res image, upscale it, and do another KSampler pass with low denoising). You can mute the second sampler and set `!yara_unmute` on it, generate many low-res images, and select the one(s) you want to do the second pass on. Then, instead of manually loading the image workflow and unmuting the node before regenerating, simply send the image through `yara regen`. You can also set `!yara_load_here` on the VAEEncode leading to the second sampler, and `!yara_mute` on the SaveImage output from the first sampler, to avoid regenerating the low-res image, saving time if you're on CPU or an old GPU.
 
-To work, this feature requires ComfyUI workflow metadata embedded into the image. Thus, it may not function with images generated through 3rd-party tools.
+To work, this feature requires ComfyUI workflow metadata embedded into the original image. Thus, it may not function with images generated through 3rd-party tools.
+
 
 
 
