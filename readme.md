@@ -17,8 +17,7 @@ It can:
 - **Help download from CivitAI**
 
 
-### [Installation](#installing)
-### [Usage](#usage)
+### [Installation](#installing) // [Usage](#usage)
 
 
 </br>
@@ -45,7 +44,7 @@ You can open the folder containing the config file with the argument `yara confi
 7. [Create a Window Displaying the Most Recently Generated Image](#create-a-window-displaying-the-most-recently-generated-image)
 8. [Open the Folder Containing the Config File](#open-the-folder-containing-the-config-file)
 9. [Download From CivitAI](#download-from-civitai)
-10 [Print Help](#print-help).
+10. [Print Help](#print-help)
 11. [Aliases](#aliases)
 
 ## Saving, Loading, Deleting, and Listing Queues <a name="saving-queues"></a>
