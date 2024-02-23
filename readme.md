@@ -3,7 +3,7 @@
 Yara
 =======
 
-Yara is a companion tool for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), based in the terminal. 
+Yara is a command-line companion tool for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). 
 It can:
 
 - **Pause queue generations by saving/loading them to files**
