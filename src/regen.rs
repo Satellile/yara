@@ -210,11 +210,12 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     // Find the node(s) to unmute
     let mut yara_unmute_nodes: Vec<FlowNodeData> = Vec::new();
     for node in &flow_nodes {
-        if node.muted {
-            if let Some(ref title) = node.custom_title {
-                let title = title.to_lowercase();
-                if title.contains("!yara_unmute") | title.contains("!yum") {
-                    // println!("Unmute Node ID: {} - {title}", node.id);
+        if let Some(ref title) = node.custom_title {
+            let title = title.to_lowercase();
+            if title.contains("!yara_unmute") | title.contains("!yum") {
+                if node.muted {
+                    println!("\x1b[33mwarning\x1b[0m:// \x1b[33m{filename}.png\x1b[0m // detected !yara_unmute keyword, but node is not muted.");
+                } else {
                     yara_unmute_nodes.push(FlowNodeData {
                         id: node.id,
                         muted: node.muted,
@@ -420,7 +421,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     }
 
     if yara_unmute_counter + yara_mute_counter + yara_load_here_counter == 0 {
-        println!("\x1b[33mwarning\x1b[0m:// \x1b[33m{filename}.png\x1b[0m // no nodes in this image's workflow had keywords (!yara_unmute, !yara_mute, !yara_load_here) in their titles. Skipping.");
+        println!("\x1b[31mwarning\x1b[0m:// \x1b[33m{filename}.png\x1b[0m // no nodes in this image's workflow had active keywords (!yara_unmute, !yara_mute, !yara_load_here) in their titles. Skipping.");
         return None;
     }
 
