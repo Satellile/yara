@@ -152,7 +152,12 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
                     Some(output_list) => {
                         let mut output_types = Vec::new();
                         for output in output_list.as_array()? {
-                            output_types.push(output.get("type")?.as_str()?.to_string());
+                            let o_type = output.get("type")?;
+                            if let Some(o_type_str) = o_type.as_str() {
+                                output_types.push(o_type_str.to_string());
+                            } else {
+                                output_types.push(o_type.as_i64()?.to_string());
+                            }
                         }
                         Some(output_types)
                     },
