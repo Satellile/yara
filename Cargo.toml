@@ -24,3 +24,5 @@ open = "4.1.0"
 native-dialog = "0.7.0"
 blake3 = "1.5.0"
 crc32fast = "1.3.2"
+
+json5 = "0.4.1" # Some custom nodes have NaN values, which serde_json doesn't seem to handle as easily. I use this as a fallback

@@ -97,8 +97,13 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
     let api_data_marker: [u8; 10] = [116, 69, 88, 116, 112, 114, 111, 109, 112, 116]; // "tEXtprompt"
     let Ok(bytes) = match_header_string_and_read_data(&mut reader, api_data_marker)
         else { println!("{fail_str} read embedded API JSON data"); return None; };
-    let Ok(api_data): Result<serde_json::Map<String, Value>, serde_json::Error> = serde_json::from_slice(&bytes)
-        else { println!("{fail_str} deserialize embedded API JSON data"); return None; };
+    let api_data: serde_json::Map<String, Value> = match serde_json::from_slice(&bytes) {
+        Ok(x) => x,
+        Err(_) => match json5::from_str(&String::from_utf8(bytes).ok()?) {
+            Ok(x) => x,
+            Err(_) => { println!("{fail_str} deserialize embedded API JSON data"); return None; }
+        }
+    };
 
     let flow_data_marker: [u8; 10] = [116, 69, 88, 116, 119, 111, 114, 107, 102, 108]; // "tEXtworkfl"
     let Ok(bytes) = match_header_string_and_read_data(&mut reader, flow_data_marker)
