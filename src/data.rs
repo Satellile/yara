@@ -26,10 +26,15 @@ impl YaraPrompt {
         let mut response = isahc::post("http://127.0.0.1:8188/prompt", prompt_string).unwrap();
         let mut buf = String::new();
         response.body_mut().read_to_string(&mut buf).unwrap();
+        if !(response.status().is_informational() || response.status().is_success()) {
+            println!("\nCritical error when communicating with ComfyUI's server");
+            println!("Could be that ComfyUI isn't running, is not on port 8188, does not have necessary custom nodes, etc.");
+            // I could handle this so that it keeps attempting to generate, but I'm OK with it just crashing
+            println!("{response:#?}\n{buf}");
+        }
 
         let json: Value = serde_json::from_str(&buf).unwrap();
         let id = json.as_object().unwrap().get("prompt_id").unwrap().as_str().unwrap();
-            // crashes if response fails (e.g. comfyui not active). maybe handle this, print some message
         println!("// Generating prompt // {id}");
         id.to_string()
     }
