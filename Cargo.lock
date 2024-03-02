@@ -3484,7 +3484,7 @@ checksum = "5a56c84a8ccd4258aed21c92f70c0f6dea75356b6892ae27c24139da456f9336"
 
 [[package]]
 name = "yara"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "blake3",
  "clipboard",
