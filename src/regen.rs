@@ -213,7 +213,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
         if let Some(ref title) = node.custom_title {
             let title = title.to_lowercase();
             if title.contains("!yara_unmute") | title.contains("!yum") {
-                if node.muted {
+                if !node.muted {
                     println!("\x1b[33mwarning\x1b[0m:// \x1b[33m{filename}.png\x1b[0m // detected !yara_unmute keyword, but node is not muted.");
                 } else {
                     yara_unmute_nodes.push(FlowNodeData {
