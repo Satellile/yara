@@ -93,7 +93,7 @@ impl Config {
             None => { ip_port += &"localhost"; }
             Some(x) => { ip_port += &x; }
         }
-        ip_port += &"/";
+        ip_port += &":";
         match &self.comfyui_port {
             None => { ip_port += &"8188"; }
             Some(x) => { ip_port += &x; }
