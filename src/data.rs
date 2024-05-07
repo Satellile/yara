@@ -8,9 +8,10 @@ pub struct YaraPrompt {
     pub prompt: serde_json::Map<String, Value>,
     pub workflow: Value,
     pub hash: String,
+    pub ip_port: String,
 }
 impl YaraPrompt {
-    pub fn new(nodemap: serde_json::Map<String, Value>, workflow: Value) -> YaraPrompt {
+    pub fn new(nodemap: serde_json::Map<String, Value>, workflow: Value, ip_port: &str) -> YaraPrompt {
         let hash = hash_nodemap(&nodemap);
         let mut prompt = serde_json::Map::new();
         prompt.insert("prompt".to_string(), Value::Object(nodemap));
@@ -18,17 +19,18 @@ impl YaraPrompt {
             prompt,
             workflow,
             hash,
+            ip_port: ip_port.to_string(),
         }
     }
     pub fn generate(&self) -> String {
         let prompt_string = serde_json::to_string(&self.prompt).unwrap();
 
-        let mut response = isahc::post("http://127.0.0.1:8188/prompt", prompt_string).unwrap();
+        let mut response = isahc::post(self.ip_port.clone() + &"prompt", prompt_string).unwrap();
         let mut buf = String::new();
         response.body_mut().read_to_string(&mut buf).unwrap();
         if !(response.status().is_informational() || response.status().is_success()) {
             println!("\nCritical error when communicating with ComfyUI's server");
-            println!("Could be that ComfyUI isn't running, is not on port 8188, does not have necessary custom nodes, etc.");
+            println!("Could be that ComfyUI isn't running, the config has incorrect address/ports, does not have necessary custom nodes, etc.");
             // I could handle this so that it keeps attempting to generate, but I'm OK with it just crashing
             println!("{response:#?}\n{buf}");
         }

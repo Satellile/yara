@@ -28,7 +28,8 @@ pub struct Config {
     /// By default, yara only checks the ComfyUI output folder for images missing workflows. You may add additional folders to be checked here. 
     workflow_recovery_directories: Option<Vec<PathBuf>>,
 
-    // pub comfyui_port: usize,
+    pub comfyui_port: Option<String>,
+    pub comfyui_address: Option<String>,
 
     /// The default window position for 'yara preview'. For multiple monitors, you can include negative coordinates/numbers to move to the left.
     pub default_window_position: (i32, i32),
@@ -86,6 +87,23 @@ impl Config {
             }
         }
     }
+    pub fn get_ip_port(&self) -> String {
+        let mut ip_port = "http://".to_string();
+        match &self.comfyui_address {
+            None => { ip_port += &"localhost"; }
+            Some(x) => { ip_port += &x; }
+        }
+        ip_port += &"/";
+        match &self.comfyui_port {
+            None => { ip_port += &"8188"; }
+            Some(x) => { ip_port += &x; }
+        }
+        ip_port += &"/";
+        if (None != self.comfyui_address) || (None != self.comfyui_port) {
+            println!("Using non-default address/port for ComfyUI: {ip_port}");
+        }
+        ip_port
+    }
 }
 
 
@@ -117,6 +135,8 @@ pub fn create_new_config() {
         comfyui_input_directory: Some(comfyui_input_directory),
         regen_directory: Some(regen_directory),
         workflow_recovery_directories: Some(workflow_recovery_directories),
+        comfyui_port: None,
+        comfyui_address: None,
         default_window_position: (0, 0),
         default_window_size: (750, 750),
         base_image: None,

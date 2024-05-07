@@ -94,8 +94,8 @@ fn main() {
         Err(e) => panic!("Error while reading workflow storage file:\n{e}\n\n"),
     };
 
-    // let comfyui_ip_port = "localhost:" + &cfg.comfyui_port.to_string();
-
+    let ip_port = cfg.get_ip_port();
+    
     let mut args = std::env::args().skip(1);
     if let Some(cmd) = args.next() {
         match cmd.to_lowercase().as_str() {
@@ -104,7 +104,7 @@ fn main() {
             }
             "l" | "load" => {
                 if let Some(arg) = args.next() {
-                    load_queue(arg, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
+                    load_queue(arg, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory, ip_port);
                 } 
                 else { print_help(); }
             }
@@ -113,12 +113,12 @@ fn main() {
                     match arg.as_str() {
                         "-wr" => {
                             if let Some(arg) = args.next() {
-                                save_queue(arg, SaveQueue::All);
+                                save_queue(arg, SaveQueue::All, ip_port);
                             } 
                             else { print_help(); }
                         }
                         _ => {
-                            save_queue(arg, SaveQueue::Pending);
+                            save_queue(arg, SaveQueue::Pending, ip_port);
                         }
                     }
                 } 
@@ -130,13 +130,13 @@ fn main() {
                 } 
                 else { print_help(); }
             }
-            "e" | "examine" => { examine_queue(); }
-            "w" | "wait" => { wait_to_end(); }
+            "e" | "examine" => { examine_queue(ip_port); }
+            "w" | "wait" => { wait_to_end(ip_port); }
             "c" | "caffeine" => { caffeine(); }
             "m" | "melatonin" => { melatonin(); }
             "cwm" => {
                 caffeine();
-                wait_to_end();
+                wait_to_end(ip_port);
                 melatonin();
             }
             "p" | "preview" => {
@@ -181,7 +181,7 @@ fn main() {
                         ids.push(arg.parse::<i64>().unwrap());
                     }
                 }
-                cancel_generations(ids);
+                cancel_generations(ids, ip_port);
             }
             "config" => {
                 open_config_dir();
@@ -194,7 +194,7 @@ fn main() {
                     for path in args {
                         let path = PathBuf::from(path);
                         if path_is_png_file(path.as_path()) {
-                            match regen_modified_workflows(&PathBuf::from(&path), cfg.get_input_dir()) {
+                            match regen_modified_workflows(&PathBuf::from(&path), cfg.get_input_dir(), &ip_port) {
                                 Some(yara_prompt) => yara_prompts.push(yara_prompt),
                                 None => failures.push(path),
                             }
@@ -208,7 +208,7 @@ fn main() {
                     for entry in entries {
                         let path = entry.unwrap().path();
                         if path_is_png_file(path.as_path()) {
-                            match regen_modified_workflows(&path, cfg.get_input_dir()) {
+                            match regen_modified_workflows(&path, cfg.get_input_dir(), &ip_port) {
                                 Some(yara_prompt) => yara_prompts.push(yara_prompt),
                                 None => failures.push(path),
                             }
@@ -221,7 +221,7 @@ fn main() {
                 if yara_prompts.is_empty() {
                     println!("No images were detected with Yara regen keywords (!yara_unmute, !yara_mute, or !yara_load_here).");
                 } else {
-                    generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory);
+                    generate_yara_prompts(yara_prompts, &mut workflow_storage, &workflow_storage_file, cfg.comfyui_output_directory, ip_port);
                 }
             }
             "f" | "fix" => {
@@ -259,8 +259,8 @@ fn main() {
 
 
 
-fn save_queue(arg: String, cmd: SaveQueue) {
-    let queue_data = get_queue();
+fn save_queue(arg: String, cmd: SaveQueue, ip_port: String) {
+    let queue_data = get_queue(&ip_port);
 
     let mut prompts: Vec<YaraPrompt> = Vec::new();
     let mut successes = 0;
@@ -274,7 +274,7 @@ fn save_queue(arg: String, cmd: SaveQueue) {
                 match pnginfo {
                     Some(wf) => {
                         let workflow = wf.as_object().unwrap().get("workflow").unwrap().clone();
-                        prompts.push(YaraPrompt::new(prompt, workflow));
+                        prompts.push(YaraPrompt::new(prompt, workflow, &ip_port));
                         successes += 1;
                     }
                     None => {
@@ -296,7 +296,7 @@ fn save_queue(arg: String, cmd: SaveQueue) {
                     let workflow = wf.as_object().unwrap().get("workflow").unwrap().clone();
                     ordered_prompts.push((
                         p[0].as_i64().unwrap(), 
-                        YaraPrompt::new(prompt, workflow)
+                        YaraPrompt::new(prompt, workflow, &ip_port)
                         ));
                     successes += 1;
                 }
@@ -323,8 +323,8 @@ fn save_queue(arg: String, cmd: SaveQueue) {
 }
 
 
-fn cancel_generations(prompt_numbers: Vec<i64>) {
-    let queue_data = get_queue();
+fn cancel_generations(prompt_numbers: Vec<i64>, ip_port: String) {
+    let queue_data = get_queue(&ip_port);
 
     let mut ids: Vec<String> = Vec::new();
     let mut interrupt_active_gen = false;
@@ -350,13 +350,13 @@ fn cancel_generations(prompt_numbers: Vec<i64>) {
 
 
     let data = serde_json::to_string(&RemovePrompts{ delete: ids }).unwrap();
-    let response = isahc::post("http://127.0.0.1:8188/queue", data).unwrap();
+    let response = isahc::post(ip_port.to_string() + &"queue", data).unwrap();
 
     println!("Queue-Clearing Status: {:?}", response.status());
     assert!(response.status() == 200);
 
     if interrupt_active_gen {
-        let response = isahc::post("http://127.0.0.1:8188/interrupt", "x").unwrap();
+        let response = isahc::post(ip_port + &"interrupt", "x").unwrap();
         println!("Active generation interrupted: {:?}", response.status());
     }
 }
@@ -365,12 +365,12 @@ fn cancel_generations(prompt_numbers: Vec<i64>) {
 
 
 
-fn load_queue(arg: String, storage: &mut WorkflowStorage, workflow_file: &str, output_dir: PathBuf) {
+fn load_queue(arg: String, storage: &mut WorkflowStorage, workflow_file: &str, output_dir: PathBuf, ip_port: String) {
     let path = get_saved_queue_path(arg);
     let file = fs::File::open(path).unwrap();
     let reader = BufReader::new(file);
     let yara_prompts: Vec<YaraPrompt> = serde_json::from_reader(reader).unwrap();
-    generate_yara_prompts(yara_prompts, storage, workflow_file, output_dir);
+    generate_yara_prompts(yara_prompts, storage, workflow_file, output_dir, ip_port);
 }
 
 
@@ -383,8 +383,8 @@ fn delete_saved_queue(arg: String) {
 
 
 
-fn examine_queue() {
-    let queue_date = get_queue();
+fn examine_queue(ip_port: String) {
+    let queue_date = get_queue(&ip_port);
 
     let mut ordered_prompts: Vec<(i64, PromptInfo)> = Vec::new();
 
@@ -527,14 +527,14 @@ fn count_queue(queue_data: Value) -> usize {
 }
 
 
-fn wait_to_end() {
-    let count = count_queue(get_queue());
+fn wait_to_end(ip_port: String) {
+    let count = count_queue(get_queue(&ip_port));
     let now_total_time = Instant::now();
     let elapsed = format_seconds(now_total_time.elapsed().as_secs());
     print!("{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
     std::io::stdout().flush().unwrap();
     loop {
-        let queue_data = get_queue();
+        let queue_data = get_queue(&ip_port);
         if let (Some(x), Some(y)) = (queue_data["queue_running"].as_array(), queue_data["queue_pending"].as_array()) {
             if x.is_empty() & y.is_empty() {
                 println!("\nQueue is empty.");
@@ -728,8 +728,8 @@ fn image_generation_info() -> ImageGenInteractive {
 
 
 
-fn get_queue() -> Value {
-    let mut response = isahc::get("http://127.0.0.1:8188/queue").unwrap();
+fn get_queue(ip_port: &str) -> Value {
+    let mut response = isahc::get(ip_port.to_string() + &"queue").unwrap();
     let mut buf = String::new();
     response.body_mut().read_to_string(&mut buf).unwrap();
     let json_data: Value = serde_json::from_str(&buf).unwrap();

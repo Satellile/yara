@@ -66,9 +66,10 @@ pub fn generate_yara_prompts(
     mut storage: &mut WorkflowStorage,
     workflow_file: &str,
     comfyui_output_directory: PathBuf,
+    ip_port: String,
 ) {
     // get and store history
-    let mut stored_history = get_history();
+    let mut stored_history = get_history(&ip_port);
     let mut prompt_ids: HashMap<String, PIDStatus> = HashMap::new();
     for id in stored_history.as_object().unwrap().keys() {
         prompt_ids.insert(id.to_string(), PIDStatus::Existing);
@@ -95,7 +96,7 @@ pub fn generate_yara_prompts(
         let finished = prompt_ids.iter().fold(true, |acc, x| if x.1 == &PIDStatus::Queued { false } else { acc });
         if finished { break; }
         // Exit if there's no more prompts in the queue
-        let count = count_queue(get_queue());
+        let count = count_queue(get_queue(&ip_port));
         if count == 0 { break; }
 
         print!("\r{STATUS}waiting... [ {} ] ({count} prompts in queue)               ", format_seconds(timer.elapsed().as_secs()));
@@ -103,7 +104,7 @@ pub fn generate_yara_prompts(
 
         std::thread::sleep(std::time::Duration::from_secs(3));
 
-        let new_history = get_history();
+        let new_history = get_history(&ip_port);
 
         if stored_history != new_history {
             stored_history = new_history.clone();
@@ -158,8 +159,8 @@ fn get_api_hash_from_image_file(path: &Path) -> Result<String, std::io::Error> {
     let hash = hash_nodemap(&x);
     Ok(hash)
 }
-fn get_history() -> Value {
-    let mut response = isahc::get("http://127.0.0.1:8188/history").unwrap();
+fn get_history(ip_port: &str) -> Value {
+    let mut response = isahc::get(ip_port.to_string() + &"history").unwrap();
     let mut buf = String::new();
     response.body_mut().read_to_string(&mut buf).unwrap();
     serde_json::from_str(&buf).unwrap()

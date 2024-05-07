@@ -81,7 +81,7 @@ struct Node {
 
 
 
-pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory: PathBuf) -> Option<YaraPrompt> {
+pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory: PathBuf, ip_port: &str) -> Option<YaraPrompt> {
     let filename = filepath.file_stem()?.to_string_lossy();
     let fail_str = "\x1b[31mfailure\x1b[0m:// \x1b[31m".to_string() + &filename + &".png\x1b[0m // failed to";
     let mut yara_unmute_counter = 0;
@@ -427,7 +427,7 @@ pub fn regen_modified_workflows(filepath: &PathBuf, mut comfyui_input_directory:
 
     let succ_str = "\x1b[32mprepped\x1b[0m:// \x1b[32m".to_string() + &filename + &".png\x1b[0m // ";
     println!("{succ_str}{yara_unmute_counter} nodes unmuted, {yara_mute_counter} nodes muted, {yara_load_here_counter} nodes replaced with LoadImage node.");
-    Some(YaraPrompt::new(json_prompt, flow_data))
+    Some(YaraPrompt::new(json_prompt, flow_data, &ip_port))
 }
 
 
