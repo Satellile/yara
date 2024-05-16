@@ -545,7 +545,7 @@ fn wait_to_end(ip_port: String) {
 
         let count = count_queue(queue_data);
         let elapsed = format_seconds(now_total_time.elapsed().as_secs());
-        print!("\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
+        print!("\r\r{STATUS}[{elapsed}] waiting until queue is empty... (\x1b[36m{count}\x1b[0m items remaining)");
         std::io::stdout().flush().unwrap();
     }
     println!("\nFinished waiting - took {}", format_seconds(now_total_time.elapsed().as_secs()));
