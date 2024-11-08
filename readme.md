@@ -143,6 +143,7 @@ ComfyUI doesn't prevent Windows from sleeping, but sleep mode halts ComfyUI gene
     
 By default, 'melatonin' will have Windows sleep after 30 minutes of inactivity. You can customize this length in the config file.
 
+Please note: this command changes your Windows OS sleep settings. If you run `yara caffeine` only, your computer will not go to sleep, even when `yara` isn't running.
 
 
 ## Halt Terminal Until Queue Is Empty
