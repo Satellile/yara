@@ -90,13 +90,22 @@ impl Config {
     pub fn get_ip_port(&self) -> String {
         let mut ip_port = "http://".to_string();
         match &self.comfyui_address {
-            None => { ip_port += &"localhost"; }
             Some(x) => { ip_port += &x; }
+            None => { ip_port += &"localhost"; }
         }
         ip_port += &":";
         match &self.comfyui_port {
-            None => { ip_port += &"8188"; }
             Some(x) => { ip_port += &x; }
+            None => {
+                // It seems ComfyUI has different default ports depending on whether you're using the portable version or not?
+                // Github lists it as 8188, which it normally has been, but the wiki and a user had their default port at 8000
+                // So if the user has no custom port, test 8188 and switch to 8000 if 8188 fails
+                if isahc::get(ip_port.clone() + &"8188/queue").is_ok() {
+                    ip_port += &"8188"
+                } else {
+                    ip_port += &"8000"
+                }
+            }
         }
         ip_port += &"/";
         if (None != self.comfyui_address) || (None != self.comfyui_port) {
